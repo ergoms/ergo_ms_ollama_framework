@@ -2,125 +2,57 @@
 Django команда для управления моделями Ollama
 """
 
-import subprocess
-import sys
-import psutil
 import logging
 import time
 from pathlib import Path
-from typing import Optional, List
 
-from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
+
 from modules.ollama_framework.api.methods import OllamaMethods
+from modules.ollama_framework.api.ollama_process import find_ollama, start_ollama_background
 
 logger = logging.getLogger('modules.ollama_framework.commands')
 
 
 class Command(BaseCommand):
     help = 'Менеджер моделей Ollama'
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.ollama_methods = OllamaMethods(self.stdout)
-    
-    def find_ollama(self) -> Optional[psutil.Process]:
-        """
-        Ищет запущенный процесс Ollama.
-
-        Returns:
-            Optional[psutil.Process]: Объект процесса если Ollama запущен, иначе None
-        """
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            try:
-                cmdline = proc.info.get('cmdline') or []
-                cmdline_lower = [part.lower() for part in cmdline]
-                
-                # Ищем процесс ollama serve
-                if 'ollama' in cmdline_lower and 'serve' in cmdline_lower:
-                    logger.debug(f'Найден процесс Ollama: PID={proc.pid}')
-                    return proc
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        return None
-
-    def start_ollama_background(self) -> bool:
-        """
-        Запускает Ollama сервер в фоновом режиме.
-
-        Returns:
-            bool: True если запуск успешен, False иначе
-        """
-        try:
-            api_dir = Path(settings.API_DIR)
-            cmd: List[str] = ['ollama', 'serve']
-            
-            # Запускаем в фоне (на Windows и Linux по-разному)
-            if sys.platform == 'win32':
-                # Windows: используем CREATE_NO_WINDOW флаг
-                process = subprocess.Popen(
-                    cmd,
-                    cwd=str(api_dir),
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=subprocess.CREATE_NO_WINDOW
-                )
-            else:
-                # Linux: запускаем в фоне
-                process = subprocess.Popen(
-                    cmd,
-                    cwd=str(api_dir),
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True
-                )
-            
-            # Ждем немного, чтобы сервер успел запуститься
-            time.sleep(2)
-            
-            # Проверяем, что процесс все еще работает
-            if process.poll() is None:
-                logger.info(f'Ollama запущен в фоне (PID: {process.pid})')
-                return True
-            else:
-                logger.error('Ollama процесс завершился сразу после запуска')
-                return False
-                
-        except FileNotFoundError:
-            logger.error('Ollama не найден. Убедитесь, что Ollama установлен и доступен в PATH.')
-            return False
-        except Exception as e:
-            logger.error(f'Ошибка при запуске Ollama: {e}')
-            return False
 
     def ensure_ollama_running(self):
-        """
-        Убеждается, что Ollama сервер запущен. Если нет - запускает его.
-        """
-        if not self.find_ollama():
-            self.stdout.write(self.style.WARNING('🦙 Ollama не запущен. Запускаю...\n'))  # type: ignore[attr-defined]
-            
-            if not self.start_ollama_background():
-                raise CommandError('❌ Не удалось запустить Ollama. Убедитесь, что Ollama установлен и доступен в PATH.')
-            
-            # Ждем, пока Ollama станет доступен
-            self.stdout.write(self.style.WARNING('⏳ Ожидание запуска Ollama...'))  # type: ignore[attr-defined]
-            base_url = getattr(settings, 'OLLAMA_BASE_URL', 'http://localhost:11434')
-            
-            for i in range(30):
-                try:
-                    import httpx
-                    response = httpx.get(f"{base_url}/api/tags", timeout=2.0)
-                    if response.status_code == 200:
-                        self.stdout.write(self.style.SUCCESS('\n✅ Ollama готов к работе\n'))  # type: ignore[attr-defined]
-                        return
-                except:
-                    pass
-                time.sleep(1)
-                if (i + 1) % 5 == 0:
-                    self.stdout.write(f'   ... еще {30 - i - 1} секунд')
-            
-            raise CommandError('❌ Ollama не стал доступен за отведенное время')
+        """Убеждается, что Ollama сервер запущен. Если нет — запускает его."""
+        if find_ollama():
+            return
+
+        self.stdout.write(self.style.WARNING('Ollama не запущен. Запускаю...\n'))  # type: ignore[attr-defined]
+
+        api_dir = Path(settings.API_DIR)
+        if not start_ollama_background(api_dir):
+            raise CommandError(
+                'Не удалось запустить Ollama. Убедитесь, что Ollama установлен и доступен в PATH.'
+            )
+
+        self.stdout.write(self.style.WARNING('Ожидание запуска Ollama...'))  # type: ignore[attr-defined]
+        base_url = getattr(settings, 'OLLAMA_BASE_URL', 'http://localhost:11434')
+
+        for i in range(30):
+            try:
+                import httpx
+
+                response = httpx.get(f'{base_url}/api/tags', timeout=2.0)
+                if response.status_code == 200:
+                    self.stdout.write(self.style.SUCCESS('\nOllama готов к работе\n'))  # type: ignore[attr-defined]
+                    return
+            except Exception:
+                pass
+            time.sleep(1)
+            if (i + 1) % 5 == 0:
+                self.stdout.write(f'   ... еще {30 - i - 1} секунд')
+
+        raise CommandError('Ollama не стал доступен за отведенное время')
     
     def add_arguments(self, parser):
         parser.add_argument(
