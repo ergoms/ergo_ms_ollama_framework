@@ -12,12 +12,16 @@ from datetime import datetime
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandParser
 
-from modules.ollama_framework.api.ollama_process import find_ollama
+from modules.ollama_framework.api.ollama_process import (
+    find_ollama,
+    is_ollama_server_available,
+)
+from modules.ollama_framework.api.paths import build_ollama_env, resolve_ollama_command
 from src.core.utils.os_abstraction import get_os_abstraction
 
 logger = logging.getLogger('modules.ollama_framework.commands')
@@ -182,14 +186,15 @@ class Command(BaseCommand):
     def handle(self, *args: tuple, **options: dict) -> None:
         logger.info('Запуск команды start_ollama')
 
-        if find_ollama():
+        if find_ollama() or is_ollama_server_available():
             msg = 'Ollama уже запущен'
             logger.warning(msg)
             self.stdout.write(self.style.WARNING(msg))
             return
 
         api_dir = Path(settings.API_DIR)
-        cmd: List[str] = ['ollama', 'serve']
+        cmd = resolve_ollama_command('serve')
+        ollama_env = build_ollama_env()
 
         if options.get('host'):
             cmd.extend(['--host', str(options['host'])])
@@ -208,6 +213,7 @@ class Command(BaseCommand):
                 stderr=subprocess.STDOUT,
                 universal_newlines=True,
                 bufsize=1,
+                env=ollama_env,
             )
 
             output_queue: Queue = Queue()
@@ -263,7 +269,10 @@ class Command(BaseCommand):
                 process.wait(timeout=5)
             sys.exit(0)
         except FileNotFoundError:
-            msg = 'Ollama не найден. Убедитесь, что Ollama установлен и доступен в PATH.'
+            msg = (
+                'Ollama не найден в virtual_env/packages/ollama. '
+                'Установите: ergoms ollama_framework:install-ollama'
+            )
             logger.error(msg)
             self.stdout.write(self.style.ERROR(f'\n{msg}\n'))  # type: ignore[attr-defined]
             sys.exit(1)

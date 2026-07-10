@@ -12,5 +12,4 @@ class OllamaFrameworkConfig(AppConfig):
     verbose_name = 'Ollama Framework'
 
     def ready(self):
-        """Инициализация приложения при запуске Django"""
-        pass
+        from . import integrations  # noqa: F401

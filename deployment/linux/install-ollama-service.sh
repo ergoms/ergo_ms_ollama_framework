@@ -25,7 +25,7 @@ After=network.target
 [Service]
 Type=simple
 EnvironmentFile=/etc/default/ergo_ms
-ExecStart=/bin/bash -lc 'cd "$ERGO_ROOT/core/api" && . "$ERGO_ROOT/virtual_env/python/bin/activate" && export PYTHONPATH="$ERGO_ROOT" && python -m commands start_ollama'
+ExecStart=/bin/bash -lc 'cd "$ERGO_ROOT" && ergoms ollama_framework:start-ollama'
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, Optional
+
+from . import settings as of_settings
+
+
+class ComputeDevice(str, Enum):
+    GPU = 'gpu'
+    CPU = 'cpu'
+
+
+class LLMProvider(str, Enum):
+    AUTO = 'auto'
+    OLLAMA = 'ollama'
+
+
+@dataclass
+class RuntimeLLMConfig:
+    provider: LLMProvider = LLMProvider.AUTO
+    model: Optional[str] = of_settings.OLLAMA_DEFAULT_MODEL
+    base_url: Optional[str] = of_settings.OLLAMA_BASE_URL
+    request_timeout: float = of_settings.OLLAMA_REQUEST_TIMEOUT
+    stream_timeout: float = of_settings.OLLAMA_STREAM_TIMEOUT
+    compute_device: ComputeDevice = ComputeDevice.GPU
+    concurrency_limit: int = of_settings.OLLAMA_CONCURRENCY_LIMIT
+    max_retries: int = of_settings.OLLAMA_MAX_RETRIES
+    keep_alive: str = of_settings.OLLAMA_KEEP_ALIVE
+    provider_config: Dict[str, Any] = field(default_factory=dict)
+    device_config: Dict[str, Any] = field(default_factory=dict)
+
+    def copy_with_overrides(self, overrides: Optional[Dict[str, Any]] = None) -> 'RuntimeLLMConfig':
+        if not overrides:
+            return self
+
+        data: Dict[str, Any] = {
+            'provider': self.provider,
+            'model': self.model,
+            'base_url': self.base_url,
+            'request_timeout': self.request_timeout,
+            'stream_timeout': self.stream_timeout,
+            'compute_device': self.compute_device,
+            'concurrency_limit': self.concurrency_limit,
+            'max_retries': self.max_retries,
+            'keep_alive': self.keep_alive,
+            'provider_config': dict(self.provider_config),
+            'device_config': dict(self.device_config),
+        }
+
+        provider_overrides: Dict[str, Any] = {}
+        device_overrides: Dict[str, Any] = {}
+
+        for key, value in overrides.items():
+            if key in data:
+                data[key] = value
+            elif key.startswith('provider__'):
+                provider_overrides[key.split('__', 1)[1]] = value
+            elif key.startswith('device__'):
+                device_overrides[key.split('__', 1)[1]] = value
+            else:
+                provider_overrides[key] = value
+
+        if isinstance(data['provider'], str):
+            p = data['provider'].lower()
+            data['provider'] = LLMProvider.OLLAMA if p == 'llama_cpp' else LLMProvider(p)
+        if isinstance(data['compute_device'], str):
+            data['compute_device'] = ComputeDevice(data['compute_device'])
+
+        data['provider_config'].update(provider_overrides)
+        data['device_config'].update(device_overrides)
+
+        return RuntimeLLMConfig(**data)
+
+
+def _inject_env_defaults(config: RuntimeLLMConfig) -> RuntimeLLMConfig:
+    env_provider = os.getenv('LLM_PROVIDER', '').lower()
+    if env_provider in ('llama_cpp', 'ollama'):
+        config.provider = LLMProvider.OLLAMA
+
+    if config.provider in (LLMProvider.AUTO, LLMProvider.OLLAMA):
+        env_base_url = os.getenv('OLLAMA_BASE_URL') or os.getenv('OLLAMA_API_BASE')
+        if env_base_url:
+            config.base_url = env_base_url
+
+        env_model = os.getenv('OLLAMA_DEFAULT_MODEL')
+        if env_model:
+            config.model = env_model
+
+    if config.base_url and not config.provider_config.get('base_url'):
+        config.provider_config['base_url'] = config.base_url
+
+    if config.compute_device == ComputeDevice.CPU:
+        config.device_config.setdefault('num_gpu', 0)
+    else:
+        config.device_config.setdefault('num_gpu', -1)
+
+    return config
+
+
+_FALLBACK_CONFIG = {
+    'provider': LLMProvider.OLLAMA,
+    'model': 'mistral:7b',
+    'base_url': 'http://127.0.0.1:11434',
+    'request_timeout': 180.0,
+    'stream_timeout': 300.0,
+    'compute_device': ComputeDevice.GPU,
+    'concurrency_limit': 8,
+    'max_retries': 2,
+    'keep_alive': '10m',
+    'provider_config': {},
+    'device_config': {},
+}
+
+
+def build_runtime_config(
+    overrides: Optional[Dict[str, Any]] = None,
+    skip_env_injection: bool = False,
+) -> RuntimeLLMConfig:
+    if skip_env_injection:
+        base_config = RuntimeLLMConfig(**_FALLBACK_CONFIG)
+        config = base_config.copy_with_overrides(overrides)
+        if config.base_url and not config.provider_config.get('base_url'):
+            config.provider_config['base_url'] = config.base_url
+        if config.compute_device == ComputeDevice.CPU:
+            config.device_config.setdefault('num_gpu', 0)
+        else:
+            config.device_config.setdefault('num_gpu', -1)
+    else:
+        base_config = RuntimeLLMConfig()
+        config = base_config.copy_with_overrides(overrides)
+        config = _inject_env_defaults(config)
+
+    if config.provider == LLMProvider.AUTO:
+        config.provider = LLMProvider.OLLAMA
+
+    return config

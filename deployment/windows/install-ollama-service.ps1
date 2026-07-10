@@ -25,15 +25,21 @@ function New-OllamaServiceWrapper {
 
     New-Item -ItemType Directory -Path $wrapperDir -Force | Out-Null
 
+    $ergomsCmd = Get-Command ergoms -ErrorAction SilentlyContinue
+    $startLine = if ($ergomsCmd) {
+        "ergoms ollama_framework:start-ollama"
+    } else {
+        'python -m commands start_ollama'
+    }
+
     $content = @(
         '@echo off',
         'chcp 65001 >nul',
         'set PYTHONIOENCODING=utf-8',
         'set PYTHONUTF8=1',
         "set PYTHONPATH=$Root",
-        "cd /d `"$apiPath`"",
-        "call `"$venvActivate`"",
-        'python -m commands start_ollama'
+        "cd /d `"$Root`"",
+        $startLine
     ) -join "`r`n"
 
     Set-Content -Path $wrapperPath -Value $content -Encoding ASCII

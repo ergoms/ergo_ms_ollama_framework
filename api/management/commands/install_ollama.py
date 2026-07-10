@@ -1,175 +1,253 @@
 """
-Django команда для установки Ollama в систему
+Django команда для установки Ollama в virtual_env/packages/ollama
 """
 
-import os
-import subprocess
 import platform
 import shutil
+import subprocess
+import tarfile
+import tempfile
+import time
+import zipfile
 from pathlib import Path
-from urllib.request import urlretrieve
 
-from django.core.management.base import BaseCommand, CommandError
+import requests
 from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
+
+from modules.ollama_framework.api.paths import (
+    ensure_ollama_models_dir,
+    get_ollama_dir,
+    get_ollama_models_dir,
+)
+
+DOWNLOAD_CHUNK_SIZE = 8 * 1024 * 1024
+PROGRESS_UPDATE_INTERVAL_SEC = 0.5
 
 
 class Command(BaseCommand):
-    help = 'Устанавливает Ollama в virtual_env/packages/ollama'
-    
+    help = 'Устанавливает Ollama в virtual_env/packages/ollama, модели — в ollama_models'
+
     def add_arguments(self, parser):
         parser.add_argument(
             '--force',
             action='store_true',
             help='Переустановить Ollama, даже если он уже установлен',
         )
-    
+
     def handle(self, *args, **options):
         force = options.get('force', False)
-        
-        # Определяем пути
+
         packages_path = Path(settings.PACKAGES_PATH)
-        ollama_path = packages_path / 'ollama'
-        models_path = packages_path / 'models'
-        
-        # Проверяем, установлен ли уже Ollama
+        ollama_path = get_ollama_dir()
+        models_path = get_ollama_models_dir()
+
         if ollama_path.exists() and not force:
             self.stdout.write(self.style.WARNING(
-                f'🦙 Ollama уже установлен в {ollama_path}\n'
+                f'Ollama уже установлен в {ollama_path}\n'
                 'Используйте --force для переустановки'
             ))
             return
-        
-        # Создаем директории
+
         packages_path.mkdir(parents=True, exist_ok=True)
-        models_path.mkdir(parents=True, exist_ok=True)
-        
+        ensure_ollama_models_dir()
+        self._migrate_legacy_models_dir(packages_path, models_path)
+
         if force and ollama_path.exists():
-            self.stdout.write('🗑️  Удаление старой установки...')
+            self.stdout.write('Удаление старой установки...')
             shutil.rmtree(ollama_path, ignore_errors=True)
-        
-        self.stdout.write('📥 Установка Ollama...')
-        
-        # Определяем платформу
+
+        self.stdout.write('Установка Ollama в packages...')
+
         system = platform.system().lower()
         machine = platform.machine().lower()
-        
+
         try:
             if system == 'windows':
-                self._install_windows(ollama_path, models_path, machine)
+                self._install_windows(ollama_path, machine)
             elif system == 'linux':
-                self._install_linux(ollama_path, models_path, machine)
+                self._install_linux(ollama_path, machine)
             else:
-                raise CommandError(f'❌ Неподдерживаемая ОС: {system}')
+                raise CommandError(f'Неподдерживаемая ОС: {system}')
         except Exception as e:
-            raise CommandError(f'❌ Ошибка при установке Ollama: {e}')
-        
-        # Выводим инструкции по настройке
+            raise CommandError(f'Ошибка при установке Ollama: {e}') from e
+
         models_path_str = str(models_path.absolute())
         self.stdout.write(self.style.SUCCESS(
-            f'\n✅ Ollama установлен!\n\n'
-            f'📁 Путь к Ollama: {ollama_path.absolute()}\n'
-            f'📁 Путь к моделям: {models_path_str}\n\n'
-            f'⚠️  ВАЖНО: Установите переменную окружения:\n'
-            f'   OLLAMA_MODELS={models_path_str}\n\n'
-            f'Для Windows (PowerShell):\n'
-            f'   [System.Environment]::SetEnvironmentVariable("OLLAMA_MODELS", "{models_path_str}", "User")\n\n'
-            f'Для Linux (Bash):\n'
-            f'   echo \'export OLLAMA_MODELS="{models_path_str}"\' >> ~/.bashrc\n'
-            f'   source ~/.bashrc\n'
+            f'\nOllama установлен.\n\n'
+            f'Бинарник: {ollama_path.absolute()}\n'
+            f'Модели: {models_path_str}\n\n'
+            f'OLLAMA_MODELS задаётся автоматически при запуске через ergoms.\n'
+            f'Запуск сервера: ergoms ollama_framework:start-ollama\n'
         ))
-    
-    def _install_windows(self, ollama_path: Path, models_path: Path, machine: str):
-        """Установка Ollama на Windows"""
-        self.stdout.write('📥 Установка Ollama через официальный установщик...')
-        
-        # Скачиваем установщик
-        download_path = Path.home() / 'AppData' / 'Local' / 'Temp' / 'OllamaSetup.exe'
-        url = 'https://github.com/ollama/ollama/releases/latest/download/OllamaSetup.exe'
-        
-        if '64' not in machine and 'x86_64' not in machine and 'amd64' not in machine:
-            raise CommandError('❌ Неподдерживаемая архитектура Windows')
-        
-        self.stdout.write(f'📥 Скачивание из {url}...')
-        download_path.parent.mkdir(parents=True, exist_ok=True)
-        urlretrieve(url, download_path)
-        
-        # Запускаем установщик в тихом режиме
-        self.stdout.write('⚙️  Запуск установщика (может потребоваться подтверждение UAC)...')
-        result = subprocess.run(
-            [str(download_path), '/S'],
-            check=False,
-            capture_output=True,
-            text=True
+
+    def _migrate_legacy_models_dir(self, packages_path: Path, models_path: Path) -> None:
+        legacy_models = packages_path / 'models'
+        if not legacy_models.is_dir():
+            return
+
+        if any(models_path.iterdir()):
+            self.stdout.write(
+                self.style.WARNING(
+                    f'Устаревший каталог {legacy_models} не перенесён — '
+                    f'в {models_path} уже есть данные'
+                )
+            )
+            return
+
+        for item in legacy_models.iterdir():
+            shutil.move(str(item), str(models_path / item.name))
+
+        shutil.rmtree(legacy_models, ignore_errors=True)
+        self.stdout.write(
+            self.style.WARNING(
+                f'Данные из packages/models перенесены в {models_path}'
+            )
         )
-        
-        # Удаляем установщик
-        if download_path.exists():
-            download_path.unlink()
-        
-        if result.returncode != 0:
-            self.stdout.write(self.style.WARNING(
-                f'⚠️  Установщик завершился с кодом {result.returncode}'
-            ))
-        
-        # Ищем установленный Ollama
-        possible_paths = [
-            Path(os.environ.get('ProgramFiles', '')) / 'Ollama' / 'ollama.exe',
-            Path(os.environ.get('ProgramFiles(x86)', '')) / 'Ollama' / 'ollama.exe',
-            Path.home() / 'AppData' / 'Local' / 'Programs' / 'Ollama' / 'ollama.exe',
-        ]
-        
-        ollama_exe = None
-        for possible_path in possible_paths:
-            if possible_path.exists():
-                ollama_exe = possible_path
-                break
-        
-        if ollama_exe:
-            ollama_path.mkdir(parents=True, exist_ok=True)
-            target_exe = ollama_path / 'ollama.exe'
-            shutil.copy2(ollama_exe, target_exe)
-            self.stdout.write(self.style.SUCCESS(f'✅ Ollama скопирован в {target_exe}'))
+
+    def _install_windows(self, ollama_path: Path, machine: str) -> None:
+        if 'arm64' in machine or 'aarch64' in machine:
+            archive_name = 'ollama-windows-arm64.zip'
+        elif '64' in machine or 'x86_64' in machine or 'amd64' in machine:
+            archive_name = 'ollama-windows-amd64.zip'
         else:
-            # Создаем обертку, которая использует системный ollama
-            ollama_path.mkdir(parents=True, exist_ok=True)
-            wrapper_script = ollama_path / 'ollama.bat'
-            with open(wrapper_script, 'w', encoding='utf-8') as f:
-                f.write('@echo off\n')
-                f.write(f'set OLLAMA_MODELS={models_path.absolute()}\n')
-                f.write('ollama %*\n')
-            self.stdout.write(self.style.WARNING(
-                '⚠️  Создан скрипт-обертка. Убедитесь, что ollama доступен в PATH.\n'
-                '   Скрипт автоматически устанавливает OLLAMA_MODELS.'
-            ))
-    
-    def _install_linux(self, ollama_path: Path, models_path: Path, machine: str):
-        """Установка Ollama на Linux"""
-        self.stdout.write('📥 Установка Ollama...')
-        
-        # Определяем URL для бинарника
+            raise CommandError(f'Неподдерживаемая архитектура Windows: {machine}')
+
+        url = f'https://github.com/ollama/ollama/releases/latest/download/{archive_name}'
+        self._download_and_extract_archive(url, archive_name, ollama_path, 'zip')
+
+    def _install_linux(self, ollama_path: Path, machine: str) -> None:
         if 'x86_64' in machine or 'amd64' in machine:
-            url = 'https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64'
-            exe_name = 'ollama'
+            archive_name = 'ollama-linux-amd64.tgz'
         elif 'arm64' in machine or 'aarch64' in machine:
-            url = 'https://github.com/ollama/ollama/releases/latest/download/ollama-linux-arm64'
-            exe_name = 'ollama'
+            archive_name = 'ollama-linux-arm64.tgz'
         else:
-            raise CommandError(f'❌ Неподдерживаемая архитектура Linux: {machine}')
-        
-        # Скачиваем бинарник
-        download_path = ollama_path.parent / exe_name
-        self.stdout.write(f'📥 Скачивание из {url}...')
-        ollama_path.parent.mkdir(parents=True, exist_ok=True)
-        urlretrieve(url, download_path)
-        
-        # Копируем в packages/ollama
-        ollama_path.mkdir(parents=True, exist_ok=True)
-        target_exe = ollama_path / 'ollama'
-        shutil.copy2(download_path, target_exe)
-        os.chmod(target_exe, 0o755)
-        
-        # Удаляем временный файл
-        if download_path.exists():
-            download_path.unlink()
-        
-        self.stdout.write(self.style.SUCCESS(f'✅ Ollama установлен в {target_exe}'))
+            raise CommandError(f'Неподдерживаемая архитектура Linux: {machine}')
+
+        url = f'https://github.com/ollama/ollama/releases/latest/download/{archive_name}'
+        self._download_and_extract_archive(url, archive_name, ollama_path, 'tgz')
+
+    def _download_and_extract_archive(
+        self,
+        url: str,
+        archive_name: str,
+        target_dir: Path,
+        archive_type: str,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            archive_path = Path(tmp_dir) / archive_name
+            self._download_archive(url, archive_path)
+
+            self.stdout.write('Распаковка...')
+            target_dir.mkdir(parents=True, exist_ok=True)
+            if archive_type == 'zip':
+                with zipfile.ZipFile(archive_path, 'r') as archive:
+                    archive.extractall(target_dir)
+            else:
+                with tarfile.open(archive_path, 'r:gz') as archive:
+                    archive.extractall(target_dir)
+
+        exe_name = 'ollama.exe' if platform.system().lower() == 'windows' else 'ollama'
+        if not (target_dir / exe_name).is_file():
+            raise CommandError(
+                f'После распаковки не найден {exe_name} в {target_dir}. '
+                'Проверьте архив релиза Ollama.'
+            )
+
+        self.stdout.write(self.style.SUCCESS(f'Ollama распакован в {target_dir}'))
+
+    def _download_archive(self, url: str, destination: Path) -> None:
+        self.stdout.write(f'Скачивание: {url}')
+
+        curl_exe = shutil.which('curl')
+        if curl_exe and self._download_with_curl(curl_exe, url, destination):
+            self.stdout.write('')
+            return
+
+        self._download_with_requests(url, destination)
+        self.stdout.write('')
+
+    def _download_with_curl(self, curl_exe: str, url: str, destination: Path) -> bool:
+        try:
+            result = subprocess.run(
+                [
+                    curl_exe,
+                    '-L',
+                    '--fail',
+                    '--retry',
+                    '3',
+                    '--retry-delay',
+                    '2',
+                    '-o',
+                    str(destination),
+                    url,
+                    '--progress-bar',
+                ],
+                check=False,
+            )
+        except OSError:
+            return False
+
+        return (
+            result.returncode == 0
+            and destination.is_file()
+            and destination.stat().st_size > 0
+        )
+
+    def _download_with_requests(self, url: str, destination: Path) -> None:
+        try:
+            with requests.Session() as session:
+                response = session.get(url, stream=True, timeout=(30, 300))
+                response.raise_for_status()
+                self._stream_response_to_file(response, destination)
+        except requests.RequestException as exc:
+            raise CommandError(f'Не удалось скачать архив Ollama: {exc}') from exc
+
+    def _stream_response_to_file(self, response: requests.Response, destination: Path) -> None:
+        total_size = int(response.headers.get('content-length', 0))
+        downloaded = 0
+        started_at = time.monotonic()
+        last_ui_at = 0.0
+
+        try:
+            with destination.open('wb') as output_file:
+                for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
+                    if not chunk:
+                        continue
+                    output_file.write(chunk)
+                    downloaded += len(chunk)
+
+                    now = time.monotonic()
+                    is_complete = total_size > 0 and downloaded >= total_size
+                    if is_complete or now - last_ui_at >= PROGRESS_UPDATE_INTERVAL_SEC:
+                        elapsed = max(now - started_at, 0.001)
+                        speed_bps = downloaded / elapsed
+                        self._write_download_progress(downloaded, total_size, speed_bps)
+                        last_ui_at = now
+        except OSError as exc:
+            raise CommandError(f'Ошибка записи архива Ollama: {exc}') from exc
+        finally:
+            response.close()
+
+    def _write_download_progress(
+        self,
+        downloaded: int,
+        total_size: int,
+        speed_bps: float,
+    ) -> None:
+        downloaded_mb = downloaded / (1024 * 1024)
+        speed_mbps = speed_bps / (1024 * 1024)
+
+        if total_size > 0:
+            total_mb = total_size / (1024 * 1024)
+            percent = downloaded / total_size * 100
+            message = (
+                f'Прогресс: {percent:.1f}% '
+                f'({downloaded_mb:.1f} / {total_mb:.1f} МБ) '
+                f'— {speed_mbps:.1f} МБ/с'
+            )
+        else:
+            message = f'Скачано: {downloaded_mb:.1f} МБ — {speed_mbps:.1f} МБ/с'
+
+        self.stdout.write(f'\r{message}', ending='')
+        self.stdout.flush()

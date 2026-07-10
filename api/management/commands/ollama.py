@@ -10,7 +10,11 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from modules.ollama_framework.api.methods import OllamaMethods
-from modules.ollama_framework.api.ollama_process import find_ollama, start_ollama_background
+from modules.ollama_framework.api.ollama_process import (
+    find_ollama,
+    is_ollama_server_available,
+    start_ollama_background,
+)
 
 logger = logging.getLogger('modules.ollama_framework.commands')
 
@@ -24,30 +28,34 @@ class Command(BaseCommand):
 
     def ensure_ollama_running(self):
         """Убеждается, что Ollama сервер запущен. Если нет — запускает его."""
+        if is_ollama_server_available():
+            return
+
         if find_ollama():
+            self.stdout.write(self.style.WARNING('Ollama запускается, ожидание API...\n'))  # type: ignore[attr-defined]
+            self._wait_for_ollama_api()
             return
 
         self.stdout.write(self.style.WARNING('Ollama не запущен. Запускаю...\n'))  # type: ignore[attr-defined]
 
         api_dir = Path(settings.API_DIR)
         if not start_ollama_background(api_dir):
+            if is_ollama_server_available():
+                return
             raise CommandError(
-                'Не удалось запустить Ollama. Убедитесь, что Ollama установлен и доступен в PATH.'
+                'Не удалось запустить Ollama. '
+                'Запустите в отдельном терминале: ergoms ollama_framework:start-ollama'
             )
 
+        self._wait_for_ollama_api()
+
+    def _wait_for_ollama_api(self) -> None:
         self.stdout.write(self.style.WARNING('Ожидание запуска Ollama...'))  # type: ignore[attr-defined]
-        base_url = getattr(settings, 'OLLAMA_BASE_URL', 'http://localhost:11434')
 
         for i in range(30):
-            try:
-                import httpx
-
-                response = httpx.get(f'{base_url}/api/tags', timeout=2.0)
-                if response.status_code == 200:
-                    self.stdout.write(self.style.SUCCESS('\nOllama готов к работе\n'))  # type: ignore[attr-defined]
-                    return
-            except Exception:
-                pass
+            if is_ollama_server_available():
+                self.stdout.write(self.style.SUCCESS('\nOllama готов к работе\n'))  # type: ignore[attr-defined]
+                return
             time.sleep(1)
             if (i + 1) % 5 == 0:
                 self.stdout.write(f'   ... еще {30 - i - 1} секунд')
@@ -166,7 +174,16 @@ class Command(BaseCommand):
         
         try:
             # Для команд, требующих Ollama API, проверяем запуск сервера
-            needs_ollama = bool(chat_message or interactive or test_model or train_model or generate_data)
+            needs_ollama = bool(
+                chat_message
+                or interactive
+                or test_model
+                or train_model
+                or generate_data
+                or pull_model
+                or remove_model
+                or list_models
+            )
             if needs_ollama:
                 self.ensure_ollama_running()
             
