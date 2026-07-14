@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
@@ -76,16 +75,18 @@ class RuntimeLLMConfig:
 
 
 def _inject_env_defaults(config: RuntimeLLMConfig) -> RuntimeLLMConfig:
-    env_provider = os.getenv('LLM_PROVIDER', '').lower()
+    from src.config.env import env
+
+    env_provider = env.str('LLM_PROVIDER', default='').lower()
     if env_provider in ('llama_cpp', 'ollama'):
         config.provider = LLMProvider.OLLAMA
 
     if config.provider in (LLMProvider.AUTO, LLMProvider.OLLAMA):
-        env_base_url = os.getenv('OLLAMA_BASE_URL') or os.getenv('OLLAMA_API_BASE')
+        env_base_url = env.str('OLLAMA_BASE_URL', default='') or env.str('OLLAMA_API_BASE', default='')
         if env_base_url:
             config.base_url = env_base_url
 
-        env_model = os.getenv('OLLAMA_DEFAULT_MODEL')
+        env_model = env.str('OLLAMA_DEFAULT_MODEL', default='')
         if env_model:
             config.model = env_model
 

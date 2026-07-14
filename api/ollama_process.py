@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import List, Optional
 
 import psutil
-from django.conf import settings
 
+from modules.ollama_framework.api import settings as of_settings
 from modules.ollama_framework.api.paths import (
     build_ollama_env,
     get_ollama_dir,
@@ -20,7 +20,7 @@ logger = logging.getLogger('modules.ollama_framework.process')
 
 
 def get_ollama_base_url() -> str:
-    return getattr(settings, 'OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
+    return (of_settings.OLLAMA_BASE_URL or 'http://127.0.0.1:11434').rstrip('/')
 
 
 def is_ollama_server_available(timeout: float = 2.0) -> bool:

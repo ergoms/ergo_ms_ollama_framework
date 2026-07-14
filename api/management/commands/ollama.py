@@ -92,20 +92,13 @@ class Command(BaseCommand):
         parser.add_argument(
             '--train',
             type=str,
-            help='Обучить модель на данных ERGO MS (например: --train llama2:latest)'
+            help='Создать модель из Modelfile (например: --train llama2:latest)',
         )
         parser.add_argument(
             '--data',
             type=str,
-            help='Путь к файлу данных в папке trained_models (например: --data training_data/ergo_navigation_data.jsonl)'
+            help='Путь к файлу данных в папке trained_models (например: --data training_data/ergo_navigation_data.jsonl)',
         )
-        parser.add_argument(
-            '--generate-data',
-            action='store_true',
-            help='Сгенерировать тренировочные данные для обучения'
-        )
-        
-        # Аргументы для чата
         parser.add_argument(
             '--chat',
             nargs='+',
@@ -153,7 +146,6 @@ class Command(BaseCommand):
         show_info = options['info']
         train_model = options['train']
         data_file = options['data']
-        generate_data = options['generate_data']
         
         # Новые аргументы для чата
         chat_message_parts = options['chat']
@@ -179,7 +171,6 @@ class Command(BaseCommand):
                 or interactive
                 or test_model
                 or train_model
-                or generate_data
                 or pull_model
                 or remove_model
                 or list_models
@@ -202,8 +193,6 @@ class Command(BaseCommand):
                     self.stdout.write('❌ Укажите файл данных: --data путь/к/файлу.jsonl')
                     return
                 self.ollama_methods.train_model(train_model, data_file)
-            elif generate_data:
-                self.ollama_methods.generate_training_data()
             elif chat_message:
                 self._send_single_message(model_name, chat_message, system_prompt, temperature, max_tokens)
             elif interactive:

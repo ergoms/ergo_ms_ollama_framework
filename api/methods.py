@@ -182,12 +182,6 @@ class OllamaMethods:
         except Exception as e:
             self.stdout.write(f'Ошибка при тестировании: {e}')
 
-    def generate_training_data(self):
-        self.stdout.write(
-            'Генерация тренировочных данных пока не реализована. '
-            'Подготовьте JSONL вручную и используйте --train с --data.'
-        )
-
     def train_model(self, base_model, data_file_path):
         try:
             client = self.get_ollama_client()

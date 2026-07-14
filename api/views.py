@@ -6,13 +6,16 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .config_security import gateway_error_message, parse_config_param, sanitize_client_config
 from .services.runtime import run_chat, run_embed, run_generate, run_health, run_list_models
 
 logger = logging.getLogger(__name__)
 
 
-def _config_from_request(data: dict) -> tuple:
-    config = data.get('config')
+def _config_from_request(data: dict, user) -> tuple:
+    raw_config = data.get('config')
+    parsed = parse_config_param(raw_config) if raw_config is not None else None
+    config = sanitize_client_config(parsed, user)
     skip_env = bool(data.get('skip_env_injection', False))
     return config, skip_env
 
@@ -23,10 +26,10 @@ class OllamaStatusView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        config = request.query_params.get('config')
-        parsed_config = json.loads(config) if config else None
+        parsed_config = parse_config_param(request.query_params.get('config'))
+        config = sanitize_client_config(parsed_config, request.user)
         skip_env = request.query_params.get('skip_env_injection', '').lower() in ('1', 'true', 'yes')
-        result = run_health(config=parsed_config, skip_env_injection=skip_env)
+        result = run_health(config=config, skip_env_injection=skip_env)
         return Response(result)
 
 
@@ -34,10 +37,10 @@ class OllamaModelsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        config = request.query_params.get('config')
-        parsed_config = json.loads(config) if config else None
+        parsed_config = parse_config_param(request.query_params.get('config'))
+        config = sanitize_client_config(parsed_config, request.user)
         skip_env = request.query_params.get('skip_env_injection', '').lower() in ('1', 'true', 'yes')
-        models = run_list_models(config=parsed_config, skip_env_injection=skip_env)
+        models = run_list_models(config=config, skip_env_injection=skip_env)
         return Response({'result': models})
 
 
@@ -46,7 +49,7 @@ class OllamaGenerateView(APIView):
 
     def post(self, request):
         data = request.data or {}
-        config, skip_env = _config_from_request(data)
+        config, skip_env = _config_from_request(data, request.user)
         try:
             text = run_generate(
                 data.get('prompt', ''),
@@ -58,9 +61,9 @@ class OllamaGenerateView(APIView):
                 stream=bool(data.get('stream', False)),
             )
             return Response({'result': text})
-        except Exception as exc:
+        except Exception:
             logger.exception('ollama_framework generate failed')
-            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'error': gateway_error_message()}, status=status.HTTP_502_BAD_GATEWAY)
 
 
 class OllamaChatView(APIView):
@@ -68,11 +71,12 @@ class OllamaChatView(APIView):
 
     def post(self, request):
         data = request.data or {}
-        config, skip_env = _config_from_request(data)
+        config, skip_env = _config_from_request(data, request.user)
         messages = data.get('messages') or []
         stream = bool(data.get('stream', False))
 
         if stream:
+
             def event_stream():
                 chunks = []
 
@@ -92,8 +96,9 @@ class OllamaChatView(APIView):
                         format=data.get('format'),
                     )
                     yield json.dumps({'done': True, 'result': ''.join(chunks)}, ensure_ascii=False)
-                except Exception as exc:
-                    yield json.dumps({'error': str(exc)}, ensure_ascii=False)
+                except Exception:
+                    logger.exception('ollama_framework chat stream failed')
+                    yield json.dumps({'error': gateway_error_message()}, ensure_ascii=False)
 
             return StreamingHttpResponse(event_stream(), content_type='application/json')
 
@@ -108,9 +113,9 @@ class OllamaChatView(APIView):
                 format=data.get('format'),
             )
             return Response({'result': text})
-        except Exception as exc:
+        except Exception:
             logger.exception('ollama_framework chat failed')
-            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'error': gateway_error_message()}, status=status.HTTP_502_BAD_GATEWAY)
 
 
 class OllamaEmbedView(APIView):
@@ -118,7 +123,7 @@ class OllamaEmbedView(APIView):
 
     def post(self, request):
         data = request.data or {}
-        config, skip_env = _config_from_request(data)
+        config, skip_env = _config_from_request(data, request.user)
         texts = data.get('texts') or []
         try:
             vectors = run_embed(
@@ -128,6 +133,6 @@ class OllamaEmbedView(APIView):
                 model=data.get('model'),
             )
             return Response({'result': vectors})
-        except Exception as exc:
+        except Exception:
             logger.exception('ollama_framework embed failed')
-            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'error': gateway_error_message()}, status=status.HTTP_502_BAD_GATEWAY)

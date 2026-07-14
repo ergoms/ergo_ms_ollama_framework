@@ -1,0 +1,5 @@
+module: ollama_framework
+server:
+  name: ergo-module-ollama-framework
+  description: "MCP модуля ollama_framework — generate, models, status, pull"
+  script: mcp/server.py
