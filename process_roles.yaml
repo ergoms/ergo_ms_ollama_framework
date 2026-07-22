@@ -1,0 +1,14 @@
+# Учёт процесса Ollama в ergoms resource-usage (см. .cursor/rules/process-roles.mdc).
+module: ollama_framework
+roles:
+  - id: ollama
+    process_names:
+      - ollama
+      - ollama.exe
+    # OR между элементами when; AND внутри одного элемента
+    when:
+      - cmdline_contains_any:
+          - virtual_env/packages/ollama
+      - cmdline_contains_any:
+          - ollama
+        project_bound: true
