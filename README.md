@@ -9,10 +9,13 @@
 
 ## Быстрый старт
 
+Ops-команды (install/start/stop/status/pull) — скрипты в `deployment/`, **без Django**.
+
 ```bash
 ergoms ollama_framework:install-ollama
 ergoms ollama_framework:start-ollama
 ergoms ollama_framework:ollama-status
+ergoms ollama_framework:ollama --pull mistral:latest
 ```
 
 ## Переменные окружения (корневой `.env`)

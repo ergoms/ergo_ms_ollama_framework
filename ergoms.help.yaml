@@ -4,17 +4,17 @@ summary: "Локальный LLM-сервер Ollama и служба ergo-ollama
 
 commands:
   ollama:
-    summary: "Management-команда Ollama (подкоманды через ergoms api ollama)"
+    summary: "Менеджер моделей (list/pull/remove/chat; без Django)"
   ollama-status:
-    summary: "Проверить доступность Ollama"
+    summary: "Проверить процесс и API Ollama (без Django)"
   start-ollama:
-    summary: "Запустить процесс Ollama"
+    summary: "Запустить процесс Ollama (без Django)"
   stop-ollama:
-    summary: "Остановить процесс Ollama"
+    summary: "Остановить процесс Ollama (без Django)"
   install-ollama:
-    summary: "Установить Ollama в проект"
+    summary: "Установить Ollama в проект (без Django; кэш архива в virtual_env/cache/downloads)"
   uninstall-ollama:
-    summary: "Удалить Ollama из проекта"
+    summary: "Удалить Ollama из проекта (без Django)"
   install-ollama-service:
     summary: "Установить службу ergo-ollama"
   start-ollama-service:
@@ -28,4 +28,5 @@ commands:
 
 notes:
   - "Вызов: ergoms ollama_framework:<команда>"
+  - "Ops-команды (ollama, start/stop, status, install) не поднимают Django"
   - "LLM из других модулей — только через ollama_framework (см. ollama-framework.mdc)"
