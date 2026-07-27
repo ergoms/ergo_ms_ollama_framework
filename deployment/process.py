@@ -79,7 +79,7 @@ def start_ollama_background(
     Запускает Ollama serve в фоновом режиме.
 
     Args:
-        api_dir: рабочая директория (legacy); по умолчанию каталог пакета Ollama
+        api_dir: рабочая директория процесса; по умолчанию каталог пакета Ollama
         extra_args: дополнительные аргументы после ``serve`` (host, port)
 
     Returns:
