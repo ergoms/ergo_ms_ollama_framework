@@ -3,8 +3,10 @@ HTTP-транспорт — вызов REST API ollama_framework.
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Dict, Optional
+from urllib.parse import urlencode
 
 import httpx
 
@@ -21,6 +23,8 @@ _OPERATION_PATHS = {
     'embed': 'embed/',
 }
 
+_GET_OPERATIONS = frozenset({'health', 'list_models'})
+
 
 def _api_base(api_base: Optional[str] = None) -> str:
     base = (api_base or of_settings.OLLAMA_FRAMEWORK_API_BASE or '').strip()
@@ -32,6 +36,22 @@ def _api_base(api_base: Optional[str] = None) -> str:
     if 'ollama_framework' not in base:
         base = f'{base}ollama_framework/'
     return base
+
+
+def _query_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
+    """Параметры GET для status/models (config как JSON-строка)."""
+    params: Dict[str, str] = {}
+    if not payload:
+        return params
+    if 'config' in payload and payload['config'] is not None:
+        config = payload['config']
+        if isinstance(config, str):
+            params['config'] = config
+        else:
+            params['config'] = json.dumps(config, ensure_ascii=False)
+    if payload.get('skip_env_injection'):
+        params['skip_env_injection'] = '1'
+    return params
 
 
 def invoke_http(
@@ -53,7 +73,10 @@ def invoke_http(
 
     body = payload or {}
     try:
-        if operation == 'health':
+        if operation in _GET_OPERATIONS:
+            query = _query_from_payload(body)
+            if query:
+                url = f'{url}?{urlencode(query)}'
             response = httpx.get(url, headers=headers, timeout=min(timeout, 30.0))
         else:
             response = httpx.post(url, json=body, headers=headers, timeout=timeout)

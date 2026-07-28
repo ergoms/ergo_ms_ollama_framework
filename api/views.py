@@ -7,6 +7,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .config_security import gateway_error_message, parse_config_param, sanitize_client_config
+from .payload_limits import (
+    validate_chat_messages,
+    validate_embed_texts,
+    validate_prompt_payload,
+)
+from .permissions import CanViewOllamaFramework
 from .services.runtime import run_chat, run_embed, run_generate, run_health, run_list_models
 
 logger = logging.getLogger(__name__)
@@ -23,7 +29,7 @@ def _config_from_request(data: dict, user) -> tuple:
 class OllamaStatusView(APIView):
     """GET /api/ollama_framework/status/ — health Ollama и процесса."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
 
     def get(self, request):
         parsed_config = parse_config_param(request.query_params.get('config'))
@@ -34,7 +40,7 @@ class OllamaStatusView(APIView):
 
 
 class OllamaModelsView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
 
     def get(self, request):
         parsed_config = parse_config_param(request.query_params.get('config'))
@@ -45,10 +51,13 @@ class OllamaModelsView(APIView):
 
 
 class OllamaGenerateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
 
     def post(self, request):
         data = request.data or {}
+        err = validate_prompt_payload(data.get('prompt', ''), system=data.get('system'))
+        if err:
+            return Response({'error': err}, status=status.HTTP_400_BAD_REQUEST)
         config, skip_env = _config_from_request(data, request.user)
         try:
             text = run_generate(
@@ -67,12 +76,15 @@ class OllamaGenerateView(APIView):
 
 
 class OllamaChatView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
 
     def post(self, request):
         data = request.data or {}
-        config, skip_env = _config_from_request(data, request.user)
         messages = data.get('messages') or []
+        err = validate_chat_messages(messages)
+        if err:
+            return Response({'error': err}, status=status.HTTP_400_BAD_REQUEST)
+        config, skip_env = _config_from_request(data, request.user)
         stream = bool(data.get('stream', False))
 
         if stream:
@@ -119,12 +131,15 @@ class OllamaChatView(APIView):
 
 
 class OllamaEmbedView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
 
     def post(self, request):
         data = request.data or {}
-        config, skip_env = _config_from_request(data, request.user)
         texts = data.get('texts') or []
+        err = validate_embed_texts(texts)
+        if err:
+            return Response({'error': err}, status=status.HTTP_400_BAD_REQUEST)
+        config, skip_env = _config_from_request(data, request.user)
         try:
             vectors = run_embed(
                 texts,
