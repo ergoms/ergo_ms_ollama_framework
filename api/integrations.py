@@ -29,7 +29,10 @@ def _generate(
     num_predict: Optional[int] = None,
     temperature: float = 0.7,
     stream: bool = False,
-) -> str:
+    stream_callback: Optional[Callable[[str], None]] = None,
+    format: Optional[Any] = None,
+    return_stats: bool = False,
+) -> str | tuple[str, Dict[str, Any]]:
     return run_generate(
         prompt,
         config=config,
@@ -38,6 +41,9 @@ def _generate(
         num_predict=num_predict,
         temperature=temperature,
         stream=stream,
+        stream_callback=stream_callback,
+        format=format,
+        return_stats=return_stats,
     )
 
 
@@ -50,8 +56,10 @@ def _chat(
     temperature: Optional[float] = None,
     seed: Optional[int] = None,
     stream: bool = False,
+    stream_callback: Optional[Callable[[str], None]] = None,
     format: Optional[Any] = None,
-) -> str:
+    return_stats: bool = False,
+) -> str | tuple[str, Dict[str, Any]]:
     return run_chat(
         messages,
         config=config,
@@ -60,7 +68,9 @@ def _chat(
         temperature=temperature,
         seed=seed,
         stream=stream,
+        stream_callback=stream_callback,
         format=format,
+        return_stats=return_stats,
     )
 
 

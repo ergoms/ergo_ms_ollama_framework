@@ -26,10 +26,12 @@ function New-OllamaServiceWrapper {
     New-Item -ItemType Directory -Path $wrapperDir -Force | Out-Null
 
     $ergomsCmd = Get-Command ergoms -ErrorAction SilentlyContinue
-    $startLine = if ($ergomsCmd) {
-        "ergoms ollama_framework:start-ollama"
-    } else {
-        'python -m commands start_ollama'
+    if (-not $ergomsCmd) {
+        throw (
+            'Команда ergoms не найдена в PATH. ' +
+            'Добавьте core\deployment\bin в PATH или установите CLI проекта, ' +
+            'затем повторите установку службы.'
+        )
     }
 
     $content = @(
@@ -39,7 +41,7 @@ function New-OllamaServiceWrapper {
         'set PYTHONUTF8=1',
         "set PYTHONPATH=$Root",
         "cd /d `"$Root`"",
-        $startLine
+        'ergoms ollama_framework:start-ollama'
     ) -join "`r`n"
 
     Set-Content -Path $wrapperPath -Value $content -Encoding ASCII

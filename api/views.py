@@ -1,5 +1,7 @@
 import json
 import logging
+from queue import Empty, Queue
+from threading import Thread
 
 from django.http import StreamingHttpResponse
 from rest_framework import permissions, status
@@ -58,6 +60,17 @@ class OllamaGenerateView(APIView):
         err = validate_prompt_payload(data.get('prompt', ''), system=data.get('system'))
         if err:
             return Response({'error': err}, status=status.HTTP_400_BAD_REQUEST)
+        if bool(data.get('stream', False)):
+            return Response(
+                {
+                    'error': (
+                        'Streaming для generate через REST не поддерживается. '
+                        'Используйте ModuleBridge ollama_framework.generate '
+                        'со stream_callback или create_client.'
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         config, skip_env = _config_from_request(data, request.user)
         try:
             text = run_generate(
@@ -67,7 +80,6 @@ class OllamaGenerateView(APIView):
                 system=data.get('system'),
                 num_predict=data.get('num_predict'),
                 temperature=float(data.get('temperature', 0.7)),
-                stream=bool(data.get('stream', False)),
             )
             return Response({'result': text})
         except Exception:
@@ -88,13 +100,13 @@ class OllamaChatView(APIView):
         stream = bool(data.get('stream', False))
 
         if stream:
+            chunk_queue: Queue = Queue()
+            sentinel = object()
 
-            def event_stream():
-                chunks = []
+            def on_chunk(text: str) -> None:
+                chunk_queue.put(text)
 
-                def on_chunk(text: str) -> None:
-                    chunks.append(text)
-
+            def worker() -> None:
                 try:
                     run_chat(
                         messages,
@@ -107,12 +119,29 @@ class OllamaChatView(APIView):
                         stream_callback=on_chunk,
                         format=data.get('format'),
                     )
-                    yield json.dumps({'done': True, 'result': ''.join(chunks)}, ensure_ascii=False)
+                    chunk_queue.put(sentinel)
                 except Exception:
                     logger.exception('ollama_framework chat stream failed')
-                    yield json.dumps({'error': gateway_error_message()}, ensure_ascii=False)
+                    chunk_queue.put({'__error__': gateway_error_message()})
+                    chunk_queue.put(sentinel)
 
-            return StreamingHttpResponse(event_stream(), content_type='application/json')
+            def event_stream():
+                Thread(target=worker, daemon=True).start()
+                while True:
+                    try:
+                        item = chunk_queue.get(timeout=300)
+                    except Empty:
+                        yield json.dumps({'error': gateway_error_message()}, ensure_ascii=False) + '\n'
+                        break
+                    if item is sentinel:
+                        yield json.dumps({'done': True}, ensure_ascii=False) + '\n'
+                        break
+                    if isinstance(item, dict) and '__error__' in item:
+                        yield json.dumps({'error': item['__error__']}, ensure_ascii=False) + '\n'
+                        break
+                    yield json.dumps({'chunk': item}, ensure_ascii=False) + '\n'
+
+            return StreamingHttpResponse(event_stream(), content_type='application/x-ndjson')
 
         try:
             text = run_chat(

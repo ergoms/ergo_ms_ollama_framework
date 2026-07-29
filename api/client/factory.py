@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from ..config import RuntimeLLMConfig, build_runtime_config
 from .base import BaseLLMClient, LLMClientError
@@ -96,11 +96,3 @@ def create_client(
         device_config=runtime_config.device_config,
     )
     return runtime_config, client
-
-
-def create_ollama_client(
-    ollama_config: Optional[Dict[str, Any]] = None,
-    skip_env_injection: bool = False,
-) -> Tuple[RuntimeLLMConfig, BaseLLMClient]:
-    """Алиас create_client для совместимости с ai_assistant."""
-    return create_client(ollama_config, skip_env_injection=skip_env_injection)

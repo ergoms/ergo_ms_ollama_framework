@@ -4,7 +4,7 @@
 Runtime LLM — через modules.ollama_framework.api.client / transport.
 """
 
-from modules.ollama_framework.deployment.ollama_ops import OllamaOps
+from ..deployment.ollama_ops import OllamaOps
 
 # Совместимость со старым именем
 OllamaMethods = OllamaOps

@@ -6,7 +6,7 @@
 
 from django.core.management.base import BaseCommand
 
-from modules.ollama_framework.deployment.ollama_cli import main as ollama_main
+from ....deployment.ollama_cli import main as ollama_main
 
 
 class Command(BaseCommand):

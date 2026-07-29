@@ -5,22 +5,26 @@ MCP сервер модуля ollama_framework.
 
 import asyncio
 import json
-import subprocess
 import sys
-import time
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 import httpx
-import psutil
 
 PROJECT_DIR = Path(__file__).resolve().parents[3]
-ENV_FILE = PROJECT_DIR / '.env'
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
 
-_cursor_dir = PROJECT_DIR / '.cursor'
-if str(_cursor_dir) not in sys.path:
-    sys.path.insert(0, str(_cursor_dir))
-from os_abstraction import get_background_popen_kwargs
+from modules.ollama_framework.deployment.paths import (  # noqa: E402
+    get_default_model,
+    get_ollama_base_url,
+    get_ollama_executable,
+)
+from modules.ollama_framework.deployment.process import (  # noqa: E402
+    find_ollama,
+    is_ollama_server_available,
+    start_ollama_background as deployment_start_ollama_background,
+)
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -32,86 +36,59 @@ OLLAMA_DEFAULT_MODEL = None
 
 server = Server('ergo-module-ollama-framework')
 
-
-def load_env() -> dict:
-    env_vars = {}
-    if not ENV_FILE.exists():
-        return {}
-    with open(ENV_FILE, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                env_vars[key.strip()] = value.strip().strip('"').strip("'")
-    return env_vars
+PULL_HINT = 'ergoms ollama_framework:ollama --pull'
 
 
-def find_ollama_process() -> Optional[psutil.Process]:
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-        try:
-            cmdline = proc.info.get('cmdline') or []
-            cmdline_lower = [part.lower() for part in cmdline]
-            if 'ollama' in cmdline_lower and 'serve' in cmdline_lower:
-                return proc
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-    return None
+def find_ollama_process() -> Optional[Any]:
+    return find_ollama()
 
 
 def start_ollama_background() -> bool:
-    try:
-        api_dir = PROJECT_DIR / 'core' / 'api'
-        cmd: List[str] = ['ollama', 'serve']
-        popen_kwargs = {
-            'cwd': str(api_dir),
-            'stdout': subprocess.DEVNULL,
-            'stderr': subprocess.DEVNULL,
-            **get_background_popen_kwargs(),
-        }
-        process = subprocess.Popen(cmd, **popen_kwargs)
-        time.sleep(2)
-        return process.poll() is None
-    except (FileNotFoundError, OSError):
+    if get_ollama_executable(PROJECT_DIR) is None:
+        print(
+            '[ERROR] Ollama не найден в virtual_env/packages/ollama. '
+            'Установите: ergoms ollama_framework:install-ollama',
+            file=sys.stderr,
+        )
         return False
+    return deployment_start_ollama_background()
 
 
 async def ensure_ollama_running(base_url: str) -> bool:
-    if not find_ollama_process():
-        print('[INFO] Ollama не запущен. Запускаю...', file=sys.stderr)
-        if not start_ollama_background():
-            print('[ERROR] Не удалось запустить Ollama', file=sys.stderr)
-            return False
-        print('[INFO] Ожидание запуска Ollama...', file=sys.stderr)
-        for i in range(30):
-            try:
-                async with httpx.AsyncClient(timeout=2.0) as client:
-                    response = await client.get(f'{base_url}/api/tags')
-                    if response.status_code == 200:
-                        print('[OK] Ollama готов к работе', file=sys.stderr)
-                        return True
-            except Exception:
-                pass
-            await asyncio.sleep(1)
-            if (i + 1) % 5 == 0:
-                print(f'[INFO] ... ещё {30 - i - 1} секунд', file=sys.stderr)
-        print('[ERROR] Ollama не стал доступен за отведённое время', file=sys.stderr)
+    if is_ollama_server_available():
+        return True
+
+    print('[INFO] Ollama не запущен. Запускаю portable…', file=sys.stderr)
+    if not await asyncio.to_thread(start_ollama_background):
+        print(
+            '[ERROR] Не удалось запустить Ollama. '
+            'Проверьте: ergoms ollama_framework:install-ollama '
+            'и ergoms ollama_framework:start-ollama',
+            file=sys.stderr,
+        )
         return False
 
-    try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            response = await client.get(f'{base_url}/api/tags')
-            if response.status_code == 200:
-                return True
-    except Exception:
-        pass
+    print('[INFO] Ожидание запуска Ollama…', file=sys.stderr)
+    for i in range(30):
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                response = await client.get(f'{base_url}/api/tags')
+                if response.status_code == 200:
+                    print('[OK] Ollama готов к работе', file=sys.stderr)
+                    return True
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+        if (i + 1) % 5 == 0:
+            print(f'[INFO] ... ещё {30 - i - 1} секунд', file=sys.stderr)
+    print('[ERROR] Ollama не стал доступен за отведённое время', file=sys.stderr)
     return False
 
 
 async def initialize_config():
     global OLLAMA_BASE_URL, OLLAMA_DEFAULT_MODEL
-    env_vars = load_env()
-    OLLAMA_BASE_URL = env_vars.get('OLLAMA_BASE_URL', 'http://localhost:11434')
-    OLLAMA_DEFAULT_MODEL = env_vars.get('OLLAMA_DEFAULT_MODEL', 'mistral')
+    OLLAMA_BASE_URL = get_ollama_base_url()
+    OLLAMA_DEFAULT_MODEL = get_default_model()
     is_running = await ensure_ollama_running(OLLAMA_BASE_URL)
     if is_running:
         print('[OK] MCP ollama_framework инициализирован', file=sys.stderr)
@@ -120,7 +97,11 @@ async def initialize_config():
     else:
         print('[WARNING] MCP ollama_framework инициализирован, Ollama недоступен', file=sys.stderr)
         print(f'  - Ollama URL: {OLLAMA_BASE_URL}', file=sys.stderr)
-        print('  - Будет запущен автоматически при первом запросе', file=sys.stderr)
+        print(
+            '  - Запуск: ergoms ollama_framework:start-ollama '
+            '(или автоматически при первом запросе)',
+            file=sys.stderr,
+        )
 
 
 @server.list_tools()
@@ -222,7 +203,7 @@ async def handle_generate(arguments: dict) -> list[TextContent]:
         if e.response.status_code == 404:
             error_msg = {
                 'error': f"Модель '{model}' не найдена",
-                'suggestion': f'Установите модель: ollama pull {model}',
+                'suggestion': f'Установите модель: {PULL_HINT} {model}',
             }
         else:
             error_msg = {'error': f'Ошибка HTTP: {e.response.status_code}', 'details': e.response.text}

@@ -1,6 +1,6 @@
 """Пути локальной Ollama — re-export без Django settings."""
 
-from modules.ollama_framework.deployment.paths import (  # noqa: F401
+from ..deployment.paths import (  # noqa: F401
     build_ollama_env,
     ensure_ollama_models_dir,
     get_ollama_dir,

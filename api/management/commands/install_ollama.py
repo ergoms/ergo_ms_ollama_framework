@@ -6,7 +6,7 @@
 
 from django.core.management.base import BaseCommand, CommandError
 
-from modules.ollama_framework.deployment.install_ollama import install_ollama, PROJECT_ROOT
+from ....deployment.install_ollama import PROJECT_ROOT, install_ollama
 
 
 class Command(BaseCommand):
