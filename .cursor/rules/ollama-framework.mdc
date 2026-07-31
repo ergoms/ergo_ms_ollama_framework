@@ -1,0 +1,61 @@
+---
+description: Ollama — единая оболочка ollama_framework, запрет прямых вызовов LLM в модулях
+globs:
+  - "modules/ollama_framework/**"
+alwaysApply: false
+---
+
+# Ollama — только через ollama_framework
+
+Модуль `ollama_framework` — **единственная** точка runtime-вызовов Ollama и ops-управления сервером.
+
+## Обязательно
+
+- LLM-запросы из модулей — через `modules.ollama_framework.api.transport.ollama_invoke` или `create_client` из `modules.ollama_framework.api.client.factory`
+- Транспорт — `OLLAMA_FRAMEWORK_TRANSPORT=local|http` в `.env` модуля
+- Управление процессом и моделями — `ergoms ollama_framework:start-ollama`, `stop-ollama`, `ollama-status`, `ollama --pull` (скрипты `deployment/`, без Django); служба `ergo-ollama`
+- Учёт в `ergoms resource-usage` — [`process_roles.yaml`](../../process_roles.yaml) модуля, не правки classifier ядра (см. корневой `process-roles.mdc`)
+- Stop/install в Windows-тестах deployment — [`host_lifecycle.yaml`](../../host_lifecycle.yaml) (см. корневой `host-lifecycle.mdc`)
+- MCP Cursor — `modules/ollama_framework/mcp/`, имя сервера `ergo-module-ollama-framework` (см. корневой `mcp.mdc`)
+- Проверка health в API — `GET /api/ollama_framework/status/`
+
+## Запрещено
+
+```python
+# BAD — прямой httpx/ollama SDK к :11434 в бизнес-модулях
+import httpx
+httpx.post('http://127.0.0.1:11434/api/chat', ...)
+
+from ollama import Client
+Client(host=...).chat(...)
+```
+
+```python
+# GOOD — in-process
+from modules.ollama_framework.api.transport import ollama_invoke
+
+ollama_invoke('chat', transport='local', config={'model': 'mistral'}, messages=[...])
+```
+
+```python
+# GOOD — клиент со streaming
+from modules.ollama_framework.api.client.factory import create_client
+
+_, client = create_client({'model': 'mistral', 'base_url': url}, skip_env_injection=True)
+client.chat(messages, stream=True, stream_callback=cb, return_stats=True)
+```
+
+## ModuleBridge
+
+Операции: `ollama_framework.health`, `chat`, `generate`, `embed`, `list_models` — регистрация в [`integrations.py`](../../api/integrations.py).
+
+## Связанные правила
+
+| Тема | Файл |
+|------|------|
+| Модули, мост | корневой `modules.mdc` |
+| ergoms | корневой `no-direct-manage-py.mdc` |
+| MCP Cursor | корневой `mcp.mdc` |
+| Роли процессов | корневой `process-roles.mdc` |
+| Host lifecycle (тесты) | корневой `host-lifecycle.mdc` |
+| `<consumer>` (gateway) | `modules/<consumer>/api/…` — обёртка над transport/client `ollama_framework`, без прямого SDK |

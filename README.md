@@ -4,7 +4,7 @@
 
 ## Документация
 
-- Правило Cursor: [`.cursor/rules/ollama-framework.mdc`](../../.cursor/rules/ollama-framework.mdc)
+- Правила Cursor: [`.cursor/rules/ollama-framework.mdc`](.cursor/rules/ollama-framework.mdc), [`AGENTS.md`](AGENTS.md)
 - Справочник команд: [`ergoms.help.yaml`](ergoms.help.yaml)
 
 ## Быстрый старт
