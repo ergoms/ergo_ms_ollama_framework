@@ -1,0 +1,14 @@
+# Portable-пакеты модуля → virtual_env/packages/<dest>
+# Установка: ergoms package-install ollama
+#            ergoms ollama_framework:install-ollama
+
+module: ollama_framework
+packages:
+  ollama:
+    kind: custom
+    dest: ollama
+    installer: deployment/install_ollama.py
+    marker_windows: ollama.exe
+    marker_linux: ollama
+    extra_dirs:
+      - ollama_models

@@ -1,0 +1,31 @@
+# en overlay for ergoms.help.yaml (merged over Russian source)
+module: ollama_framework
+title: Ollama framework
+summary: Local Ollama LLM server and the ergo-ollama service
+commands:
+  ollama:
+    summary: Model manager (list/pull/remove/chat; no Django)
+  ollama-status:
+    summary: Check the Ollama process and API (no Django)
+  start-ollama:
+    summary: Start the Ollama process (no Django)
+  stop-ollama:
+    summary: Stop the Ollama process (no Django)
+  install-ollama:
+    summary: Install Ollama (alias for ergoms package-install ollama)
+  uninstall-ollama:
+    summary: Remove Ollama (alias for package-uninstall; models — with --purge-extra)
+  install-ollama-service:
+    summary: Install the ergo-ollama service
+  start-ollama-service:
+    summary: Start the ergo-ollama service
+  stop-ollama-service:
+    summary: Stop the ergo-ollama service
+  restart-ollama-service:
+    summary: Restart the ergo-ollama service
+  status-ollama-service:
+    summary: ergo-ollama service status
+notes:
+- 'Invoke: ergoms ollama_framework:<command>'
+- Ops commands (ollama, start/stop, status, install) do not start Django
+- LLM from other modules — only via ollama_framework (see ollama-framework.mdc)

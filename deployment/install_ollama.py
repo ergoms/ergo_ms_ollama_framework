@@ -1,7 +1,10 @@
 """
 Установка Ollama в virtual_env/packages/ollama без Django.
 
-Вызов: ergoms ollama_framework:install-ollama [--force] [--refresh]
+Вызов: ergoms package-install ollama [--force] [--refresh]
+       ergoms ollama_framework:install-ollama [--force] [--refresh]
+
+Регистрация в реестре: modules/ollama_framework/packages.yaml
 """
 
 from __future__ import annotations

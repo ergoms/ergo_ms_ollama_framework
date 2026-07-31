@@ -16,6 +16,7 @@ alwaysApply: false
 - Управление процессом и моделями — `ergoms ollama_framework:start-ollama`, `stop-ollama`, `ollama-status`, `ollama --pull` (скрипты `deployment/`, без Django); служба `ergo-ollama`
 - Учёт в `ergoms resource-usage` — [`process_roles.yaml`](../../process_roles.yaml) модуля, не правки classifier ядра (см. корневой `process-roles.mdc`)
 - Stop/install в Windows-тестах deployment — [`host_lifecycle.yaml`](../../host_lifecycle.yaml) (см. корневой `host-lifecycle.mdc`)
+- Setup Full / Start All — [`vscode.tasks.yaml`](../../vscode.tasks.yaml) (`include_in: setup-full` / `start-all`, см. корневой `module-vscode-tasks.mdc`)
 - MCP Cursor — `modules/ollama_framework/mcp/`, имя сервера `ergo-module-ollama-framework` (см. корневой `mcp.mdc`)
 - Проверка health в API — `GET /api/ollama_framework/status/`
 

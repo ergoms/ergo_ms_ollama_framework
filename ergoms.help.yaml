@@ -1,32 +1,31 @@
+# Source of truth (ru). Translations: locales/<lang>/ergoms.help.yaml
 module: ollama_framework
-title: "Фреймворк Ollama"
-summary: "Локальный LLM-сервер Ollama и служба ergo-ollama"
-
+title: Фреймворк Ollama
+summary: Локальный LLM-сервер Ollama и служба ergo-ollama
 commands:
   ollama:
-    summary: "Менеджер моделей (list/pull/remove/chat; без Django)"
+    summary: Менеджер моделей (list/pull/remove/chat; без Django)
   ollama-status:
-    summary: "Проверить процесс и API Ollama (без Django)"
+    summary: Проверить процесс и API Ollama (без Django)
   start-ollama:
-    summary: "Запустить процесс Ollama (без Django)"
+    summary: Запустить процесс Ollama (без Django)
   stop-ollama:
-    summary: "Остановить процесс Ollama (без Django)"
+    summary: Остановить процесс Ollama (без Django)
   install-ollama:
-    summary: "Установить Ollama в проект (без Django; кэш архива в virtual_env/cache/downloads)"
+    summary: Установить Ollama (алиас ergoms package-install ollama)
   uninstall-ollama:
-    summary: "Удалить Ollama из проекта (без Django)"
+    summary: Удалить Ollama (алиас package-uninstall; модели — с --purge-extra)
   install-ollama-service:
-    summary: "Установить службу ergo-ollama"
+    summary: Установить службу ergo-ollama
   start-ollama-service:
-    summary: "Запустить службу ergo-ollama"
+    summary: Запустить службу ergo-ollama
   stop-ollama-service:
-    summary: "Остановить службу ergo-ollama"
+    summary: Остановить службу ergo-ollama
   restart-ollama-service:
-    summary: "Перезапустить службу ergo-ollama"
+    summary: Перезапустить службу ergo-ollama
   status-ollama-service:
-    summary: "Статус службы ergo-ollama"
-
+    summary: Статус службы ergo-ollama
 notes:
-  - "Вызов: ergoms ollama_framework:<команда>"
-  - "Ops-команды (ollama, start/stop, status, install) не поднимают Django"
-  - "LLM из других модулей — только через ollama_framework (см. ollama-framework.mdc)"
+- 'Вызов: ergoms ollama_framework:<команда>'
+- Ops-команды (ollama, start/stop, status, install) не поднимают Django
+- LLM из других модулей — только через ollama_framework (см. ollama-framework.mdc)

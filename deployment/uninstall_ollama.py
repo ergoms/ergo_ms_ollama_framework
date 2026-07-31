@@ -1,7 +1,10 @@
 """
 Удаление Ollama из virtual_env/packages без Django.
 
-Вызов: ergoms ollama_framework:uninstall-ollama [--remove-models]
+Вызов: ergoms package-uninstall ollama [--purge-extra]
+       ergoms ollama_framework:uninstall-ollama [--purge-extra]
+
+Скрипт оставлен для прямого вызова с --remove-models (совместимость).
 """
 
 from __future__ import annotations
