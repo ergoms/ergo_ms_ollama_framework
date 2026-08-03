@@ -61,11 +61,16 @@ def get_default_model() -> str:
 def get_ollama_executable(root: Optional[Path] = None) -> Optional[Path]:
     ollama_dir = get_ollama_dir(root)
     if platform.system().lower() == 'windows':
-        exe = ollama_dir / 'ollama.exe'
-        if exe.is_file():
-            return exe
+        candidates = (
+            ollama_dir / 'ollama.exe',
+            ollama_dir / 'bin' / 'ollama.exe',
+        )
     else:
-        exe = ollama_dir / 'ollama'
+        candidates = (
+            ollama_dir / 'ollama',
+            ollama_dir / 'bin' / 'ollama',
+        )
+    for exe in candidates:
         if exe.is_file():
             return exe
 
@@ -85,14 +90,12 @@ def build_ollama_env(
     ollama_dir = get_ollama_dir(root)
     if ollama_dir.is_dir():
         path_sep = ';' if platform.system().lower() == 'windows' else ':'
-        current_path = env.get('PATH', '')
-        ollama_dir_str = str(ollama_dir)
-        if ollama_dir_str not in current_path.split(path_sep):
-            env['PATH'] = (
-                f'{ollama_dir_str}{path_sep}{current_path}'
-                if current_path
-                else ollama_dir_str
-            )
+        parts = env.get('PATH', '').split(path_sep) if env.get('PATH') else []
+        for prefix in (ollama_dir / 'bin', ollama_dir):
+            prefix_str = str(prefix)
+            if prefix.is_dir() and prefix_str not in parts:
+                parts.insert(0, prefix_str)
+        env['PATH'] = path_sep.join(parts)
 
     return env
 
