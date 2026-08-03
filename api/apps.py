@@ -12,4 +12,10 @@ class OllamaFrameworkConfig(AppConfig):
     verbose_name = 'Ollama Framework'
 
     def ready(self):
+        from django.conf import settings
+
         from . import integrations  # noqa: F401
+
+        # ScopedRateThrottle для generate/chat/embed (см. api/views.py).
+        rates = getattr(settings, 'REST_FRAMEWORK', {}).setdefault('DEFAULT_THROTTLE_RATES', {})
+        rates.setdefault('ollama_llm', '30/minute')

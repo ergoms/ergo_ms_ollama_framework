@@ -6,6 +6,7 @@ from threading import Thread
 from django.http import StreamingHttpResponse
 from rest_framework import permissions, status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from .config_security import gateway_error_message, parse_config_param, sanitize_client_config
@@ -18,6 +19,12 @@ from .permissions import CanViewOllamaFramework
 from .services.runtime import run_chat, run_embed, run_generate, run_health, run_list_models
 
 logger = logging.getLogger(__name__)
+
+
+class OllamaLlmThrottle(ScopedRateThrottle):
+    """Отдельный лимит на дорогие LLM-эндпоинты (generate/chat/embed)."""
+
+    scope = 'ollama_llm'
 
 
 def _config_from_request(data: dict, user) -> tuple:
@@ -54,6 +61,8 @@ class OllamaModelsView(APIView):
 
 class OllamaGenerateView(APIView):
     permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
+    throttle_classes = [UserRateThrottle, OllamaLlmThrottle]
+    throttle_scope = 'ollama_llm'
 
     def post(self, request):
         data = request.data or {}
@@ -89,6 +98,8 @@ class OllamaGenerateView(APIView):
 
 class OllamaChatView(APIView):
     permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
+    throttle_classes = [UserRateThrottle, OllamaLlmThrottle]
+    throttle_scope = 'ollama_llm'
 
     def post(self, request):
         data = request.data or {}
@@ -161,6 +172,8 @@ class OllamaChatView(APIView):
 
 class OllamaEmbedView(APIView):
     permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
+    throttle_classes = [UserRateThrottle, OllamaLlmThrottle]
+    throttle_scope = 'ollama_llm'
 
     def post(self, request):
         data = request.data or {}

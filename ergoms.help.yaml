@@ -17,6 +17,8 @@ commands:
     summary: Удалить Ollama (алиас package-uninstall; модели — с --purge-extra)
   install-ollama-service:
     summary: Установить службу ergo-ollama
+  uninstall-ollama-service:
+    summary: Удалить службу ergo-ollama
   start-ollama-service:
     summary: Запустить службу ergo-ollama
   stop-ollama-service:

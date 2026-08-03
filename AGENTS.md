@@ -12,9 +12,11 @@
 ## Запрещено
 
 - Прямой httpx / ollama SDK к `:11434` из других модулей
+- `from modules.ollama_framework…` в других модулях (только ModuleBridge)
 - Правки classifier ядра ради учёта процесса — только `process_roles.yaml` / `host_lifecycle.yaml` этого модуля
 
 ## Обязательно
 
-- Вызовы LLM — `ollama_invoke` / `create_client` из этого модуля
-- Транспорт — `OLLAMA_FRAMEWORK_TRANSPORT=local|http`
+- Вызовы LLM из других модулей — `bridge.call('ollama_framework.<op>', …)`
+- Внутри модуля — `create_client` / runtime / transport
+- Транспорт потребителя — `OLLAMA_FRAMEWORK_TRANSPORT=local|http`

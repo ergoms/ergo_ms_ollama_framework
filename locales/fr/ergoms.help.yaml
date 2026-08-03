@@ -17,6 +17,8 @@ commands:
     summary: Supprimer Ollama (alias de package-uninstall ; modèles — avec --purge-extra)
   install-ollama-service:
     summary: Installer le service ergo-ollama
+  uninstall-ollama-service:
+    summary: Supprimer le service ergo-ollama
   start-ollama-service:
     summary: Démarrer le service ergo-ollama
   stop-ollama-service:

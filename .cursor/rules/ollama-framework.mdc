@@ -1,5 +1,5 @@
 ---
-description: Ollama — единая оболочка ollama_framework, запрет прямых вызовов LLM в модулях
+description: Ollama — единая оболочка ollama_framework, вызовы только через ModuleBridge
 globs:
   - "modules/ollama_framework/**"
 alwaysApply: false
@@ -11,14 +11,15 @@ alwaysApply: false
 
 ## Обязательно
 
-- LLM-запросы из модулей — через `modules.ollama_framework.api.transport.ollama_invoke` или `create_client` из `modules.ollama_framework.api.client.factory`
-- Транспорт — `OLLAMA_FRAMEWORK_TRANSPORT=local|http` в `.env` модуля
+- LLM-запросы из **других модулей** — только `bridge.call('ollama_framework.<op>', …)`
+- Внутри этого модуля — `create_client` / `ollama_invoke` / httpx к `:11434` (не экспортировать как публичный контракт)
+- Транспорт потребителя — `OLLAMA_FRAMEWORK_TRANSPORT=local|http` в `.env` (local = ModuleBridge; http = REST этого модуля)
 - Управление процессом и моделями — `ergoms ollama_framework:start-ollama`, `stop-ollama`, `ollama-status`, `ollama --pull` (скрипты `deployment/`, без Django); служба `ergo-ollama`
 - Учёт в `ergoms resource-usage` — [`process_roles.yaml`](../../process_roles.yaml) модуля, не правки classifier ядра (см. корневой `process-roles.mdc`)
-- Stop/install в Windows-тестах deployment — [`host_lifecycle.yaml`](../../host_lifecycle.yaml) (см. корневой `host-lifecycle.mdc`)
+- Install/uninstall/stop в `install-services` / `uninstall-services` и Windows-тестах — [`host_lifecycle.yaml`](../../host_lifecycle.yaml) (см. корневой `host-lifecycle.mdc`)
 - Setup Full / Start All — [`vscode.tasks.yaml`](../../vscode.tasks.yaml) (`include_in: setup-full` / `start-all`, см. корневой `module-vscode-tasks.mdc`)
 - MCP Cursor — `modules/ollama_framework/mcp/`, имя сервера `ergo-module-ollama-framework` (см. корневой `mcp.mdc`)
-- Проверка health в API — `GET /api/ollama_framework/status/`
+- Проверка health REST — `GET /api/ollama_framework/status/` (для UI своего модуля или ops; другие модули — через bridge или свой proxy)
 
 ## Запрещено
 
@@ -27,28 +28,36 @@ alwaysApply: false
 import httpx
 httpx.post('http://127.0.0.1:11434/api/chat', ...)
 
-from ollama import Client
-Client(host=...).chat(...)
-```
-
-```python
-# GOOD — in-process
+# BAD — прямой импорт из другого модуля (нарушает modules.mdc)
 from modules.ollama_framework.api.transport import ollama_invoke
-
-ollama_invoke('chat', transport='local', config={'model': 'mistral'}, messages=[...])
+from modules.ollama_framework.api.client.factory import create_client
 ```
 
 ```python
-# GOOD — клиент со streaming
-from modules.ollama_framework.api.client.factory import create_client
+# GOOD — ModuleBridge из другого модуля
+from src.core.integrations import bridge
 
-_, client = create_client({'model': 'mistral', 'base_url': url}, skip_env_injection=True)
-client.chat(messages, stream=True, stream_callback=cb, return_stats=True)
+bridge.call(
+    'ollama_framework.chat',
+    messages=[{'role': 'user', 'content': '…'}],
+    config={'model': 'mistral'},
+)
+
+# GOOD — streaming через тот же op
+bridge.call(
+    'ollama_framework.chat',
+    messages=messages,
+    config=cfg,
+    stream=True,
+    stream_callback=on_chunk,
+)
 ```
 
 ## ModuleBridge
 
 Операции: `ollama_framework.health`, `chat`, `generate`, `embed`, `list_models` — регистрация в [`integrations.py`](../../api/integrations.py).
+
+`create_client` / `ollama_invoke` — **внутренний** API модуля; не документируй и не используй из `modules/<other>/`.
 
 ## Связанные правила
 
@@ -59,4 +68,4 @@ client.chat(messages, stream=True, stream_callback=cb, return_stats=True)
 | MCP Cursor | корневой `mcp.mdc` |
 | Роли процессов | корневой `process-roles.mdc` |
 | Host lifecycle (тесты) | корневой `host-lifecycle.mdc` |
-| `<consumer>` (gateway) | `modules/<consumer>/api/…` — обёртка над transport/client `ollama_framework`, без прямого SDK |
+| Потребитель | gateway в `modules/<consumer>/api/` — только `bridge.call`, без `from modules.ollama_framework…` |

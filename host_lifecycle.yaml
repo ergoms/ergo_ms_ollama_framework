@@ -1,9 +1,12 @@
-# Остановка/установка модульного демона в тестах deployment (см. .cursor/rules/host-lifecycle.mdc).
+# Stop/install/uninstall модульного демона: install-services / uninstall-services
+# и тесты deployment (см. .cursor/rules/host-lifecycle.mdc).
 module: ollama_framework
 host:
   stop_commands:
     - ollama_framework:stop-ollama
   install_service_commands:
     - ollama_framework:install-ollama-service
+  uninstall_service_commands:
+    - ollama_framework:uninstall-ollama-service
   service_units:
     - ergo-ollama

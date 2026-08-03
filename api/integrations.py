@@ -7,7 +7,18 @@ from typing import Any, Callable, Dict, List, Optional
 
 from src.core.integrations import bridge
 
+from .client.base import LLMClientError
+from .payload_limits import (
+    validate_chat_messages,
+    validate_embed_texts,
+    validate_prompt_payload,
+)
 from .services.runtime import run_chat, run_embed, run_generate, run_health, run_list_models
+
+
+def _raise_if_invalid(error: Optional[str]) -> None:
+    if error:
+        raise LLMClientError(error)
 
 
 @bridge.provide_op('ollama_framework.health')
@@ -33,6 +44,7 @@ def _generate(
     format: Optional[Any] = None,
     return_stats: bool = False,
 ) -> str | tuple[str, Dict[str, Any]]:
+    _raise_if_invalid(validate_prompt_payload(prompt, system=system))
     return run_generate(
         prompt,
         config=config,
@@ -60,6 +72,7 @@ def _chat(
     format: Optional[Any] = None,
     return_stats: bool = False,
 ) -> str | tuple[str, Dict[str, Any]]:
+    _raise_if_invalid(validate_chat_messages(messages))
     return run_chat(
         messages,
         config=config,
@@ -81,6 +94,7 @@ def _embed(
     skip_env_injection: bool = False,
     model: Optional[str] = None,
 ) -> List[List[float]]:
+    _raise_if_invalid(validate_embed_texts(texts))
     return run_embed(
         texts,
         config=config,

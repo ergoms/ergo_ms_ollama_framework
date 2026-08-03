@@ -1,7 +1,6 @@
 """Безопасная обработка config из REST-запросов ollama_framework."""
 from __future__ import annotations
 
-import ipaddress
 import json
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -41,17 +40,11 @@ def _allowed_hosts() -> set[str]:
     return hosts
 
 
-def _is_private_or_local_host(hostname: str) -> bool:
+def _is_allowed_ollama_host(hostname: str) -> bool:
+    """Только localhost / хост из OLLAMA_BASE_URL — без произвольных private IP (SSRF)."""
     if not hostname:
         return False
-    lowered = hostname.lower()
-    if lowered in _allowed_hosts():
-        return True
-    try:
-        ip = ipaddress.ip_address(lowered)
-        return ip.is_loopback or ip.is_private
-    except ValueError:
-        return False
+    return hostname.lower() in _allowed_hosts()
 
 
 def _validate_base_url(url: str) -> None:
@@ -60,8 +53,12 @@ def _validate_base_url(url: str) -> None:
     parsed = urlparse(url.strip())
     if parsed.scheme not in ('http', 'https'):
         raise ValidationError({'config': 'base_url: допустимы только http и https.'})
-    if not _is_private_or_local_host(parsed.hostname or ''):
-        raise ValidationError({'config': 'base_url: разрешены только локальные адреса Ollama.'})
+    if not _is_allowed_ollama_host(parsed.hostname or ''):
+        raise ValidationError({
+            'config': (
+                'base_url: разрешены только localhost и хост из OLLAMA_BASE_URL.'
+            ),
+        })
 
 
 def _strip_url_overrides(config: dict) -> dict:

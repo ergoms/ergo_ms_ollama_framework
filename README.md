@@ -40,4 +40,4 @@ ergoms ollama_framework:ollama --pull mistral:latest
 - `GET /api/ollama_framework/models/`
 - `POST /api/ollama_framework/generate/`, `chat/`, `embed/`
 
-Вызовы из других модулей — через `ollama_invoke` или `create_client` из `api/client/factory.py`, не напрямую к `:11434`.
+Вызовы из других модулей — только через `bridge.call('ollama_framework.<op>', …)`, не через прямой import и не напрямую к `:11434`.
