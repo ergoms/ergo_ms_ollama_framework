@@ -13,7 +13,6 @@ import argparse
 import os
 import platform
 import shutil
-import socket
 import subprocess
 import sys
 import tarfile
@@ -117,84 +116,43 @@ def _write_download_progress(
     sys.stdout.flush()
 
 
-def _port_open(host: str, port: int) -> bool:
-    try:
-        with socket.create_connection((host, port), timeout=0.4):
-            return True
-    except OSError:
-        return False
-
-
-def _local_download_proxies() -> list[str | None]:
-    """Order: env default, then ops-content HTTP bridge / SOCKS if listening."""
-    proxies: list[str | None] = [None]
-    if _port_open('127.0.0.1', 1088):
-        proxies.append('http://127.0.0.1:1088')
-    if _port_open('127.0.0.1', 1080):
-        proxies.append('socks5h://127.0.0.1:1080')
-    return proxies
-
-
-def _download_with_curl(
-    url: str,
-    destination: Path,
-    *,
-    proxy: str | None = None,
-) -> bool:
+def _download_with_curl(url: str, destination: Path) -> bool:
     curl_exe = shutil.which('curl')
     if not curl_exe:
         return False
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.unlink(missing_ok=True)
-    cmd = [
-        curl_exe,
-        '-L',
-        '--fail',
-        '--retry',
-        '3',
-        '--retry-delay',
-        '2',
-        '-A',
-        DOWNLOAD_USER_AGENT,
-        '-o',
-        str(destination),
-        url,
-        '--progress-bar',
-    ]
-    env = None
-    if proxy:
-        # Override corporate http(s)_proxy so curl uses the local bridge.
-        cmd[1:1] = ['--proxy', proxy]
-        env = os.environ.copy()
-        for key in (
-            'http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY',
-            'all_proxy', 'ALL_PROXY',
-        ):
-            env.pop(key, None)
     try:
-        result = subprocess.run(cmd, check=False, env=env)
+        result = subprocess.run(
+            [
+                curl_exe,
+                '-L',
+                '--fail',
+                '--retry',
+                '3',
+                '--retry-delay',
+                '2',
+                '-A',
+                DOWNLOAD_USER_AGENT,
+                '-o',
+                str(destination),
+                url,
+                '--progress-bar',
+            ],
+            check=False,
+        )
     except OSError:
         return False
 
-    ok = (
+    return (
         result.returncode == 0
         and destination.is_file()
         and destination.stat().st_size >= MIN_ARCHIVE_BYTES
     )
-    if not ok:
-        destination.unlink(missing_ok=True)
-    return ok
 
 
-def _download_with_urllib(
-    url: str,
-    destination: Path,
-    *,
-    proxy: str | None = None,
-) -> None:
+def _download_with_urllib(url: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.unlink(missing_ok=True)
     request = urllib.request.Request(
         url,
         headers={'User-Agent': DOWNLOAD_USER_AGENT},
@@ -203,18 +161,7 @@ def _download_with_urllib(
     started_at = time.monotonic()
     last_ui_at = 0.0
 
-    if proxy and proxy.startswith('socks'):
-        raise RuntimeError('urllib fallback не поддерживает SOCKS; нужен curl')
-
-    if proxy:
-        opener = urllib.request.build_opener(
-            urllib.request.ProxyHandler({'http': proxy, 'https': proxy}),
-        )
-        open_response = opener.open
-    else:
-        open_response = urllib.request.urlopen
-
-    with open_response(request, timeout=DOWNLOAD_TIMEOUT_SEC) as response:
+    with urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT_SEC) as response:
         total_size = int(response.headers.get('Content-Length') or 0)
         with destination.open('wb') as output_file:
             while True:
@@ -239,36 +186,11 @@ def _download_with_urllib(
 
 def _download_archive(url: str, destination: Path) -> None:
     print(f'Скачивание: {url}')
-    proxies = _local_download_proxies()
-    last_error: Exception | None = None
+    if _download_with_curl(url, destination):
+        print()
+        return
 
-    for proxy in proxies:
-        label = proxy or 'env/default'
-        if proxy:
-            print(f'Повтор через локальный прокси: {proxy}')
-        if _download_with_curl(url, destination, proxy=proxy):
-            print()
-            return
-        if proxy and proxy.startswith('socks'):
-            last_error = RuntimeError(
-                f'curl не скачал через {proxy}; urllib SOCKS не поддерживает',
-            )
-            print(format_console('warning', f'Скачивание не удалось ({label}): {last_error}'))
-            continue
-        try:
-            _download_with_urllib(url, destination, proxy=proxy)
-            return
-        except Exception as exc:  # noqa: BLE001 — пробуем следующий прокси
-            last_error = exc
-            destination.unlink(missing_ok=True)
-            print(format_console(
-                'warning',
-                f'Скачивание не удалось ({label}): {exc}',
-            ))
-
-    if last_error is not None:
-        raise last_error
-    raise RuntimeError(f'Не удалось скачать {url}')
+    _download_with_urllib(url, destination)
 
 
 def _locate_ollama_binary(target_dir: Path) -> Path | None:
