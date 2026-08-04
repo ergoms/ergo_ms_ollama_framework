@@ -15,3 +15,10 @@ tasks:
     panel: new
     include_in:
       - start-all
+
+  - label: "Ollama: Logs"
+    detail: "Открыть хвост логов Ollama"
+    command: "ergoms ollama_framework:logs-ollama 500"
+    hide: true
+    include_in:
+      - logs-all

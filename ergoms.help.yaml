@@ -11,6 +11,8 @@ commands:
     summary: Запустить процесс Ollama (без Django)
   stop-ollama:
     summary: Остановить процесс Ollama (без Django)
+  logs-ollama:
+    summary: Хвост логов Ollama (файл logs/ или journalctl)
   install-ollama:
     summary: Установить Ollama (алиас ergoms package-install ollama)
   uninstall-ollama:
