@@ -39,7 +39,7 @@ echo ""
 echo "=== Installing Ollama Service ==="
 echo ""
 
-install_unit "ergo-ollama" "$OLLAMA_UNIT"
+install_unit "ergo-ollama" "$OLLAMA_UNIT" "$ERGO_ROOT"
 daemon_reload
 enable_and_start ergo-ollama.service
 
