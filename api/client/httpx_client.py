@@ -11,6 +11,26 @@ from .base import BaseLLMClient, LLMClientError
 logger = logging.getLogger(__name__)
 
 
+def resolve_ollama_model(requested: Optional[str], available: List[str]) -> str:
+    """Подбирает установленную модель: точное имя или то же семейство (mistral:7b → mistral:latest)."""
+    models = [m for m in available if isinstance(m, str) and m]
+    if not models:
+        return requested or ''
+    if not requested:
+        return models[0]
+    if requested in models:
+        return requested
+
+    base = requested.split(':', 1)[0]
+    same_family = [m for m in models if m == base or m.startswith(f'{base}:')]
+    if same_family:
+        for candidate in same_family:
+            if candidate == base or candidate.endswith(':latest'):
+                return candidate
+        return same_family[0]
+    return requested
+
+
 class HttpxOllamaClient(BaseLLMClient):
     """HTTP-клиент Ollama API (httpx)."""
 
@@ -30,6 +50,7 @@ class HttpxOllamaClient(BaseLLMClient):
         self._base_url = base_url.rstrip('/')
         self._max_retries = max_retries
         self._device_config = device_config or {}
+        self._model_resolved = False
 
         limits = httpx.Limits(
             max_connections=concurrency_limit,
@@ -47,16 +68,39 @@ class HttpxOllamaClient(BaseLLMClient):
     def get_provider_name(self) -> str:
         return 'ollama'
 
+    def _ensure_resolved_model(self) -> None:
+        if self._model_resolved:
+            return
+        models = self.list_models()
+        resolved = resolve_ollama_model(self.model, models)
+        if resolved and resolved != self.model:
+            logger.info(
+                'Модель %r не найдена среди установленных, используем %r',
+                self.model,
+                resolved,
+            )
+            self.model = resolved
+        self._model_resolved = True
+
     def check_health(self) -> Dict[str, Any]:
         try:
             resp = self._client.get('/api/tags', timeout=5.0)
             resp.raise_for_status()
             data = resp.json()
             models = [m.get('name', '') for m in data.get('models', [])]
+            resolved = resolve_ollama_model(self.model, models)
+            model_loaded = bool(
+                resolved
+                and (
+                    resolved in models
+                    or any(resolved == m or m.startswith(f'{resolved}:') for m in models)
+                )
+            )
             return {
                 'available': True,
                 'models': models,
-                'model_loaded': self.model in models or any(self.model in m for m in models),
+                'model': resolved or self.model,
+                'model_loaded': model_loaded,
                 'base_url': self._base_url,
             }
         except httpx.TimeoutException:
@@ -119,6 +163,9 @@ class HttpxOllamaClient(BaseLLMClient):
         )
         if format is not None:
             payload['format'] = format
+        self._ensure_resolved_model()
+        payload['model'] = self.model
+
         last_error: Optional[Exception] = None
         for attempt in range(self._max_retries + 1):
             try:
@@ -193,6 +240,8 @@ class HttpxOllamaClient(BaseLLMClient):
             stream=True,
             system=system,
         )
+        self._ensure_resolved_model()
+        payload['model'] = self.model
         with self._client.stream('POST', '/api/generate', json=payload) as response:
             response.raise_for_status()
             for raw_line in response.iter_lines():
@@ -237,6 +286,9 @@ class HttpxOllamaClient(BaseLLMClient):
             payload['options']['seed'] = seed
         if self._device_config:
             payload['options'].update(self._device_config)
+
+        self._ensure_resolved_model()
+        payload['model'] = self.model
 
         last_error: Optional[Exception] = None
         for attempt in range(self._max_retries + 1):
@@ -339,13 +391,30 @@ class HttpxOllamaClient(BaseLLMClient):
                 )
         raise LLMClientError('Ollama embed API недоступен') from last_error
 
+    @staticmethod
+    def _response_body_text(response: httpx.Response) -> str:
+        """Текст тела ответа; для stream=True нужен read() до .text."""
+        try:
+            return response.text
+        except httpx.ResponseNotRead:
+            try:
+                response.read()
+                return response.text
+            except Exception:
+                return ''
+        except Exception:
+            return ''
+
     def _http_error(self, endpoint: str, exc: httpx.HTTPStatusError) -> LLMClientError:
+        body = self._response_body_text(exc.response)
         if exc.response.status_code == 404:
             error_msg = (
                 f'Ollama API вернул 404 для /api/{endpoint}.\n'
                 f'URL: {self._base_url}/api/{endpoint}\n'
                 f"Модель '{self.model}' существует? Выполните: ergoms ollama_framework:ollama --list\n"
-                f'Ответ сервера: {exc.response.text}'
+                f'Ответ сервера: {body}'
             )
             return LLMClientError(error_msg)
+        if body:
+            return LLMClientError(f'{exc}; тело: {body}')
         return LLMClientError(str(exc))

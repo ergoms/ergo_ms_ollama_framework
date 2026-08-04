@@ -103,7 +103,7 @@ def _inject_env_defaults(config: RuntimeLLMConfig) -> RuntimeLLMConfig:
 
 _FALLBACK_CONFIG = {
     'provider': LLMProvider.OLLAMA,
-    'model': 'mistral:7b',
+    'model': 'mistral:latest',
     'base_url': 'http://127.0.0.1:11434',
     'request_timeout': 180.0,
     'stream_timeout': 300.0,

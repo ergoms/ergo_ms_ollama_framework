@@ -55,7 +55,7 @@ def get_ollama_base_url() -> str:
 
 
 def get_default_model() -> str:
-    return read_env('OLLAMA_DEFAULT_MODEL', 'mistral:7b') or 'mistral:7b'
+    return read_env('OLLAMA_DEFAULT_MODEL', 'mistral:latest') or 'mistral:latest'
 
 
 def get_ollama_executable(root: Optional[Path] = None) -> Optional[Path]:
