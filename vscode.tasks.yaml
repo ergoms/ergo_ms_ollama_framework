@@ -12,6 +12,7 @@ tasks:
   - label: "Ollama: Start"
     detail: "Запустить процесс Ollama в терминале"
     command: "ergoms ollama_framework:start-ollama"
+    stop_command: "ergoms ollama_framework:stop-ollama"
     panel: new
     include_in:
       - start-all

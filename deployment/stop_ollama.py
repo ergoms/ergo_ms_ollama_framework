@@ -18,7 +18,7 @@ if str(DEPLOYMENT_DIR) not in sys.path:
     sys.path.insert(0, str(DEPLOYMENT_DIR))
 
 from console_tags import configure_stdio_utf8, format_console  # noqa: E402
-from modules.ollama_framework.deployment.process import find_ollama  # noqa: E402
+from modules.ollama_framework.deployment.process import find_ollama, terminate_ollama_process  # noqa: E402
 
 
 def stop_ollama() -> int:
@@ -29,8 +29,7 @@ def stop_ollama() -> int:
 
     try:
         pid = process.pid
-        process.terminate()
-        process.wait(timeout=5)
+        terminate_ollama_process(process)
         print(format_console('ok', f'Ollama процесс (PID: {pid}) успешно остановлен'))
         return 0
     except Exception as exc:

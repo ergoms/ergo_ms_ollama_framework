@@ -7,14 +7,18 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import re
+import signal
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
@@ -27,12 +31,17 @@ if str(DEPLOYMENT_DIR) not in sys.path:
 from console_tags import configure_stdio_utf8, format_console  # noqa: E402
 from modules.ollama_framework.deployment.paths import (  # noqa: E402
     build_ollama_env,
+    get_ollama_base_url,
     get_ollama_dir,
     resolve_ollama_command,
 )
 from modules.ollama_framework.deployment.process import (  # noqa: E402
+    build_foreground_popen_kwargs,
     find_ollama,
+    foreground_child_lifecycle,
     is_ollama_server_available,
+    is_tcp_port_in_use,
+    terminate_ollama_process,
 )
 
 
@@ -160,10 +169,63 @@ def _read_output(pipe, queue: Queue) -> None:
         queue.put(None)
 
 
-def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
-    if find_ollama() or is_ollama_server_available():
+def _resolve_listen_target(
+    host: Optional[str],
+    port: Optional[str],
+) -> tuple[str, int]:
+    base_url = get_ollama_base_url()
+    parsed = urlparse(base_url)
+    listen_host = host or parsed.hostname or '127.0.0.1'
+    listen_port = int(port or parsed.port or 11434)
+    return listen_host, listen_port
+
+
+def _prepare_startup(host: Optional[str], port: Optional[str]) -> Optional[int]:
+    listen_host, listen_port = _resolve_listen_target(host, port)
+
+    existing = find_ollama()
+    if existing is not None or is_ollama_server_available():
         print(format_console('warning', 'Ollama уже запущен'))
         return 0
+
+    if not is_tcp_port_in_use(listen_host, listen_port):
+        return None
+
+    orphan = find_ollama(include_wrapper=True)
+    if orphan is not None:
+        print(
+            format_console(
+                'warning',
+                f'Порт {listen_port} занят процессом Ollama (PID: {orphan.pid}), останавливаем...',
+            )
+        )
+        terminate_ollama_process(orphan)
+        time.sleep(0.5)
+        if is_ollama_server_available() or is_tcp_port_in_use(listen_host, listen_port):
+            print(
+                format_console(
+                    'error',
+                    f'Порт {listen_port} всё ещё занят. '
+                    'Остановите процесс вручную: ergoms ollama_framework:stop-ollama',
+                )
+            )
+            return 1
+        return None
+
+    print(
+        format_console(
+            'error',
+            f'Порт {listen_port} уже занят другим процессом. '
+            'Проверьте: netstat -ano | findstr {listen_port}',
+        )
+    )
+    return 1
+
+
+def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
+    prepared = _prepare_startup(host, port)
+    if prepared is not None:
+        return prepared
 
     cmd = resolve_ollama_command('serve')
     if host:
@@ -173,7 +235,25 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
 
     ollama_dir = get_ollama_dir()
     working_dir = ollama_dir if ollama_dir.is_dir() else PROJECT_ROOT
-    process = None
+    process: subprocess.Popen[str] | None = None
+    session_owned = False
+
+    def _cleanup_process() -> None:
+        nonlocal session_owned
+        if not session_owned or process is None:
+            return
+        if process.poll() is None:
+            terminate_ollama_process(process)
+        session_owned = False
+
+    def _handle_signal(signum: int, _frame: object) -> None:
+        _cleanup_process()
+        raise SystemExit(128 + signum if signum else 0)
+
+    if hasattr(signal, 'SIGTERM'):
+        signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+    atexit.register(_cleanup_process)
 
     try:
         print(format_console('info', 'Запуск Ollama Server'))
@@ -185,50 +265,50 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
             universal_newlines=True,
             bufsize=1,
             env=build_ollama_env(),
+            **build_foreground_popen_kwargs(),
         )
+        session_owned = True
 
-        output_queue: Queue = Queue()
-        output_thread = Thread(target=_read_output, args=(process.stdout, output_queue))
-        output_thread.daemon = True
-        output_thread.start()
+        with foreground_child_lifecycle(process):
+            output_queue: Queue = Queue()
+            output_thread = Thread(target=_read_output, args=(process.stdout, output_queue))
+            output_thread.daemon = True
+            output_thread.start()
 
-        metrics: Dict[str, Any] = {'total_tokens': 0, 'total_duration': 0}
+            metrics: Dict[str, Any] = {'total_tokens': 0, 'total_duration': 0}
 
-        while True:
-            try:
-                line = output_queue.get(timeout=0.1)
-                if line is None:
-                    break
-                log_data = parse_ollama_log(line)
-                if log_data:
-                    track_generation_metrics(log_data, metrics)
-                    print(format_log_line(log_data))
-                else:
-                    print(line)
-            except Empty:
-                if process.poll() is not None:
-                    while True:
-                        try:
-                            line = output_queue.get_nowait()
-                            if line is None:
+            while True:
+                try:
+                    line = output_queue.get(timeout=0.1)
+                    if line is None:
+                        break
+                    log_data = parse_ollama_log(line)
+                    if log_data:
+                        track_generation_metrics(log_data, metrics)
+                        print(format_log_line(log_data))
+                    else:
+                        print(line)
+                except Empty:
+                    if process.poll() is not None:
+                        while True:
+                            try:
+                                line = output_queue.get_nowait()
+                                if line is None:
+                                    break
+                                log_data = parse_ollama_log(line)
+                                print(format_log_line(log_data) if log_data else line)
+                            except Empty:
                                 break
-                            log_data = parse_ollama_log(line)
-                            print(format_log_line(log_data) if log_data else line)
-                        except Empty:
-                            break
-                    break
+                        break
 
-        output_thread.join(timeout=1)
-        return_code = process.wait()
-        if return_code != 0:
-            print(format_console('error', f'Ollama завершился с кодом: {return_code}'))
-        return return_code
+            output_thread.join(timeout=1)
+            return_code = process.wait()
+            if return_code != 0:
+                print(format_console('error', f'Ollama завершился с кодом: {return_code}'))
+            return return_code
 
     except KeyboardInterrupt:
         print(format_console('warning', 'Получен сигнал прерывания, завершение работы...'))
-        if process is not None:
-            process.terminate()
-            process.wait(timeout=5)
         return 0
     except FileNotFoundError:
         print(
@@ -241,9 +321,10 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
         return 1
     except Exception as exc:
         print(format_console('error', f'Ошибка: {exc}'))
-        if process is not None:
-            process.terminate()
         return 1
+    finally:
+        atexit.unregister(_cleanup_process)
+        _cleanup_process()
 
 
 def main(argv: list[str] | None = None) -> int:
