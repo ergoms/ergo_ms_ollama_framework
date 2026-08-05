@@ -74,7 +74,29 @@ class RuntimeLLMConfig:
         return RuntimeLLMConfig(**data)
 
 
-def _inject_env_defaults(config: RuntimeLLMConfig) -> RuntimeLLMConfig:
+def parse_compute_device(value: Any) -> Optional[ComputeDevice]:
+    if value is None:
+        return None
+    if isinstance(value, ComputeDevice):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in ('gpu', 'cpu'):
+        return ComputeDevice(normalized)
+    return None
+
+
+def _sync_num_gpu(config: RuntimeLLMConfig) -> None:
+    if config.compute_device == ComputeDevice.CPU:
+        config.device_config.setdefault('num_gpu', 0)
+    else:
+        config.device_config.setdefault('num_gpu', -1)
+
+
+def _inject_env_defaults(
+    config: RuntimeLLMConfig,
+    *,
+    apply_compute_device: bool = True,
+) -> RuntimeLLMConfig:
     from src.config.env import env
 
     env_provider = env.str('LLM_PROVIDER', default='').lower()
@@ -93,10 +115,10 @@ def _inject_env_defaults(config: RuntimeLLMConfig) -> RuntimeLLMConfig:
     if config.base_url and not config.provider_config.get('base_url'):
         config.provider_config['base_url'] = config.base_url
 
-    if config.compute_device == ComputeDevice.CPU:
-        config.device_config.setdefault('num_gpu', 0)
-    else:
-        config.device_config.setdefault('num_gpu', -1)
+    if apply_compute_device:
+        config.compute_device = ComputeDevice(of_settings.OLLAMA_COMPUTE_DEVICE)
+
+    _sync_num_gpu(config)
 
     return config
 
@@ -120,19 +142,19 @@ def build_runtime_config(
     overrides: Optional[Dict[str, Any]] = None,
     skip_env_injection: bool = False,
 ) -> RuntimeLLMConfig:
+    override_values = dict(overrides or {})
+    explicit_compute = 'compute_device' in override_values or 'num_gpu' in override_values
+
     if skip_env_injection:
         base_config = RuntimeLLMConfig(**_FALLBACK_CONFIG)
-        config = base_config.copy_with_overrides(overrides)
+        config = base_config.copy_with_overrides(override_values)
         if config.base_url and not config.provider_config.get('base_url'):
             config.provider_config['base_url'] = config.base_url
-        if config.compute_device == ComputeDevice.CPU:
-            config.device_config.setdefault('num_gpu', 0)
-        else:
-            config.device_config.setdefault('num_gpu', -1)
+        _sync_num_gpu(config)
     else:
         base_config = RuntimeLLMConfig()
-        config = base_config.copy_with_overrides(overrides)
-        config = _inject_env_defaults(config)
+        config = base_config.copy_with_overrides(override_values)
+        config = _inject_env_defaults(config, apply_compute_device=not explicit_compute)
 
     if config.provider == LLMProvider.AUTO:
         config.provider = LLMProvider.OLLAMA

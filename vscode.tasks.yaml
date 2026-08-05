@@ -6,6 +6,15 @@ tasks:
     detail: "Установить portable Ollama в virtual_env/packages"
     command: "ergoms ollama_framework:install-ollama"
     hide: true
+    order: 0
+    include_in:
+      - setup-full
+
+  - label: "Ollama: Pull setup models"
+    detail: "Скачать модели из modules/*/ollama_models.yaml (embeddings и LLM)"
+    command: "ergoms ollama_framework:pull-setup-models"
+    hide: true
+    order: 10
     include_in:
       - setup-full
 

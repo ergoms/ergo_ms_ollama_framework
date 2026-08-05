@@ -92,12 +92,29 @@ class OllamaOps:
         except Exception as exc:
             self.stdout.write(f'Ошибка получения списка моделей: {exc}')
 
-    def pull_model(self, model_name: str) -> None:
+    def is_model_installed(self, model_name: str) -> bool:
+        try:
+            models = self._list_model_names()
+        except Exception:
+            return False
+        if model_name in models:
+            return True
+        base = model_name.split(':', 1)[0]
+        for installed in models:
+            if installed == model_name:
+                return True
+            if installed.startswith(f'{base}:'):
+                return True
+            if model_name in installed:
+                return True
+        return False
+
+    def pull_model(self, model_name: str) -> bool:
         try:
             client = self.get_ollama_client()
         except ImportError:
             self.stdout.write('Ollama Python client не установлен')
-            return
+            return False
 
         self.stdout.write(f'Скачиваю модель {model_name}...')
         last_key = None
@@ -112,9 +129,11 @@ class OllamaOps:
                 last_key = key
             self.stdout.write('')
             self.stdout.write(f'Модель {model_name} успешно скачана')
+            return True
         except Exception as exc:
             self.stdout.write('')
             self.stdout.write(f'Ошибка при скачивании модели: {exc}')
+            return False
 
     def remove_model(self, model_name: str) -> None:
         try:

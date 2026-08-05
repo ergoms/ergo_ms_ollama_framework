@@ -13,6 +13,7 @@ Ops-команды (install/start/stop/status/pull) — скрипты в `deplo
 
 ```bash
 ergoms ollama_framework:install-ollama
+ergoms ollama_framework:pull-setup-models
 ergoms ollama_framework:start-ollama
 ergoms ollama_framework:ollama-status
 ergoms ollama_framework:ollama --pull mistral:latest
@@ -24,11 +25,12 @@ ergoms ollama_framework:ollama --pull mistral:latest
 |------|------------|
 | `OLLAMA_BASE_URL` | URL сервера Ollama (по умолчанию `http://127.0.0.1:11434`) |
 | `OLLAMA_DEFAULT_MODEL` | Модель по умолчанию для chat/generate |
-| `OLLAMA_EMBEDDINGS_MODEL` | Модель для embeddings |
+| `OLLAMA_EMBEDDINGS_MODEL` | Модель для embeddings (pull в setup-full через `ollama_models.yaml`) |
 | `OLLAMA_FRAMEWORK_TRANSPORT` | `local` (ModuleBridge in-process) или `http` (REST API модуля) |
 | `OLLAMA_FRAMEWORK_API_BASE` | Базовый URL API при transport=http |
 | `OLLAMA_REQUEST_TIMEOUT` | Таймаут запроса, сек |
 | `OLLAMA_STREAM_TIMEOUT` | Таймаут streaming, сек |
+| `OLLAMA_COMPUTE_DEVICE` | `gpu` или `cpu` — устройство inference по умолчанию для всех потребителей |
 
 ## ModuleBridge
 

@@ -5,6 +5,8 @@ summary: Serveur LLM Ollama local et service ergo-ollama
 commands:
   ollama:
     summary: Gestionnaire de modèles (list/pull/remove/chat ; sans Django)
+  pull-setup-models:
+    summary: Télécharger les modèles depuis modules/*/ollama_models.yaml (setup-full)
   ollama-status:
     summary: Vérifier le processus et l'API Ollama (sans Django)
   start-ollama:
@@ -31,5 +33,6 @@ commands:
     summary: État du service ergo-ollama
 notes:
 - 'Appel : ergoms ollama_framework:<commande>'
-- Les commandes ops (ollama, start/stop, status, install) ne démarrent pas Django
+- Les commandes ops (ollama, start/stop, status, install, pull-setup-models) ne démarrent pas Django
+- Modèles setup-full — hook ollama_models.yaml chez les consommateurs (requires ollama_framework)
 - LLM depuis d'autres modules — uniquement via ollama_framework (voir ollama-framework.mdc)

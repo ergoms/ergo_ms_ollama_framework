@@ -5,6 +5,8 @@ summary: Локальный LLM-сервер Ollama и служба ergo-ollama
 commands:
   ollama:
     summary: Менеджер моделей (list/pull/remove/chat; без Django)
+  pull-setup-models:
+    summary: Скачать модели из modules/*/ollama_models.yaml (setup-full)
   ollama-status:
     summary: Проверить процесс и API Ollama (без Django)
   start-ollama:
@@ -31,5 +33,6 @@ commands:
     summary: Статус службы ergo-ollama
 notes:
 - 'Вызов: ergoms ollama_framework:<команда>'
-- Ops-команды (ollama, start/stop, status, install) не поднимают Django
+- Ops-команды (ollama, start/stop, status, install, pull-setup-models) не поднимают Django
+- Модели для setup-full — hook `ollama_models.yaml` в модуле-потребителе (requires ollama_framework)
 - LLM из других модулей — только через ollama_framework (см. ollama-framework.mdc)

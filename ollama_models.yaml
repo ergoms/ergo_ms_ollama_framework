@@ -1,0 +1,13 @@
+# Модели Ollama для setup-full (ergoms ollama_framework:pull-setup-models).
+# Потребители ollama_framework добавляют свой ollama_models.yaml — не vscode.tasks.yaml.
+
+module: ollama_framework
+models:
+  - env: OLLAMA_EMBEDDINGS_MODEL
+    kind: embedding
+    default: embeddinggemma
+    required: true
+  - env: OLLAMA_DEFAULT_MODEL
+    kind: llm
+    default: mistral:latest
+    required: false
