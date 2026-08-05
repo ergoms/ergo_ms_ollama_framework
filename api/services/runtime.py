@@ -3,7 +3,7 @@ Runtime-операции Ollama — общая логика для ModuleBridge 
 """
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from ..client.factory import create_client
 from ..ollama_process import find_ollama
@@ -60,7 +60,7 @@ def run_generate(
 
 
 def run_chat(
-    messages: List[Dict[str, str]],
+    messages: List[Dict[str, Any]],
     *,
     config: Optional[Dict[str, Any]] = None,
     skip_env_injection: bool = False,
@@ -82,6 +82,24 @@ def run_chat(
         stream_callback=stream_callback,
         format=format,
         return_stats=return_stats,
+    )
+
+
+def run_chat_stream(
+    messages: List[Dict[str, Any]],
+    *,
+    config: Optional[Dict[str, Any]] = None,
+    skip_env_injection: bool = False,
+    num_predict: Optional[int] = None,
+    temperature: Optional[float] = None,
+    seed: Optional[int] = None,
+) -> Iterator[str]:
+    _, client = _resolve_client(config, skip_env_injection=skip_env_injection)
+    yield from client.chat_stream_iter(
+        messages,
+        num_predict=num_predict,
+        temperature=temperature,
+        seed=seed,
     )
 
 

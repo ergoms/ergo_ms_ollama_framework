@@ -11,6 +11,10 @@ MAX_MESSAGES = 100
 MAX_MESSAGE_CHARS = 50_000
 MAX_EMBED_TEXTS = 64
 MAX_EMBED_TEXT_CHARS = 20_000
+# Vision: Ollama /api/chat images — base64 без data-URI.
+MAX_IMAGES_PER_MESSAGE = 8
+MAX_IMAGE_B64_CHARS = 15_000_000
+MAX_IMAGES_TOTAL_B64_CHARS = 40_000_000
 
 
 def validate_prompt_payload(
@@ -35,6 +39,7 @@ def validate_chat_messages(messages: Any) -> Optional[str]:
         return 'messages должен быть списком'
     if len(messages) > MAX_MESSAGES:
         return f'слишком много messages (макс. {MAX_MESSAGES})'
+    total_images_b64 = 0
     for i, msg in enumerate(messages):
         if not isinstance(msg, dict):
             return f'messages[{i}] должен быть объектом'
@@ -48,6 +53,32 @@ def validate_chat_messages(messages: Any) -> Optional[str]:
                 f'messages[{i}].content слишком длинный '
                 f'(макс. {MAX_MESSAGE_CHARS} символов)'
             )
+        images = msg.get('images')
+        if images is None:
+            continue
+        if not isinstance(images, list):
+            return f'messages[{i}].images должен быть списком'
+        if len(images) > MAX_IMAGES_PER_MESSAGE:
+            return (
+                f'messages[{i}].images слишком много '
+                f'(макс. {MAX_IMAGES_PER_MESSAGE})'
+            )
+        for j, image in enumerate(images):
+            if not isinstance(image, str):
+                return f'messages[{i}].images[{j}] должен быть строкой (base64)'
+            if not image:
+                return f'messages[{i}].images[{j}] пустой'
+            if len(image) > MAX_IMAGE_B64_CHARS:
+                return (
+                    f'messages[{i}].images[{j}] слишком большой '
+                    f'(макс. {MAX_IMAGE_B64_CHARS} символов base64)'
+                )
+            total_images_b64 += len(image)
+            if total_images_b64 > MAX_IMAGES_TOTAL_B64_CHARS:
+                return (
+                    f'суммарный размер images слишком большой '
+                    f'(макс. {MAX_IMAGES_TOTAL_B64_CHARS} символов base64)'
+                )
     return None
 
 

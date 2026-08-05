@@ -16,7 +16,7 @@ alwaysApply: false
 - Транспорт потребителя — `OLLAMA_FRAMEWORK_TRANSPORT=local|http` в `.env` (local = ModuleBridge; http = REST этого модуля)
 - Устройство inference — `OLLAMA_COMPUTE_DEVICE=gpu|cpu` (глобально); потребители могут переопределить в своём `config` или `.env`
 - Управление процессом и моделями — `ergoms ollama_framework:start-ollama`, `stop-ollama`, `ollama-status`, `ollama --pull`, `pull-setup-models` (скрипты `deployment/`, без Django); служба `ergo-ollama`
-- Модели для setup-full — hook `ollama_models.yaml` у `ollama_framework` и модулей с `requires: ollama_framework` (не отдельные vscode.tasks.yaml у потребителей)
+- Модели для setup-full — hook `ollama_models.yaml` у `ollama_framework` и модулей с `requires: ollama_framework`; discovery/агрегат — [`deployment/ollama_models_loader.py`](../../deployment/ollama_models_loader.py), pull — `ergoms ollama_framework:pull-setup-models` (не в ядре)
 - Учёт в `ergoms resource-usage` — [`process_roles.yaml`](../../process_roles.yaml) модуля, не правки classifier ядра (см. корневой `process-roles.mdc`)
 - Install/uninstall/stop в `install-services` / `uninstall-services` и Windows-тестах — [`host_lifecycle.yaml`](../../host_lifecycle.yaml) (см. корневой `host-lifecycle.mdc`)
 - Setup Full / Start All — [`vscode.tasks.yaml`](../../vscode.tasks.yaml) (`include_in: setup-full` / `start-all`, см. корневой `module-vscode-tasks.mdc`)

@@ -70,7 +70,7 @@ def ollama_invoke(
 
 
 def ollama_chat(
-    messages: List[Dict[str, str]],
+    messages: List[Dict[str, Any]],
     *,
     config: Optional[Dict[str, Any]] = None,
     transport: Optional[str] = None,

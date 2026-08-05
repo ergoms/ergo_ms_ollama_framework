@@ -15,16 +15,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 DEPLOYMENT_DIR = PROJECT_ROOT / 'core' / 'deployment'
-SCRIPTS_DIR = DEPLOYMENT_DIR / 'scripts'
 if str(DEPLOYMENT_DIR) not in sys.path:
     sys.path.insert(0, str(DEPLOYMENT_DIR))
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
 
 from console_tags import configure_stdio_utf8, format_console  # noqa: E402
-from ollama_models_loader import load_resolved_models  # noqa: E402
 
 from modules.ollama_framework.deployment.install_ollama import is_installed  # noqa: E402
+from modules.ollama_framework.deployment.ollama_models_loader import (  # noqa: E402
+    load_resolved_models,
+)
 from modules.ollama_framework.deployment.ollama_ops import OllamaOps  # noqa: E402
 
 

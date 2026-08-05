@@ -1,12 +1,44 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import json
+import threading
+from typing import Any, Dict, Optional, Tuple
 
 from ..config import RuntimeLLMConfig, build_runtime_config
 from .base import BaseLLMClient, LLMClientError
 from .httpx_client import HttpxOllamaClient
 
 OLLAMA_OPTION_KEYS = ('top_p', 'top_k', 'repeat_penalty', 'num_ctx', 'think')
+
+_CLIENT_CACHE: Dict[tuple, HttpxOllamaClient] = {}
+_CLIENT_CACHE_LOCK = threading.Lock()
+
+
+def _device_config_cache_key(device_config: Optional[Dict[str, Any]]) -> str:
+    return json.dumps(device_config or {}, sort_keys=True, default=str)
+
+
+def _client_cache_key(
+    *,
+    model: str,
+    base_url: str,
+    request_timeout: float,
+    stream_timeout: float,
+    concurrency_limit: int,
+    max_retries: int,
+    keep_alive: str,
+    device_config: Optional[Dict[str, Any]],
+) -> tuple:
+    return (
+        base_url.rstrip('/'),
+        model,
+        request_timeout,
+        stream_timeout,
+        concurrency_limit,
+        max_retries,
+        keep_alive,
+        _device_config_cache_key(device_config),
+    )
 
 
 def build_llm_client(
@@ -34,7 +66,7 @@ def build_llm_client(
     base_api_url = provider_config.get('base_url', base_url)
 
     if normalized_provider in ('auto', 'ollama'):
-        return HttpxOllamaClient(
+        cache_key = _client_cache_key(
             model=model,
             base_url=base_api_url,
             request_timeout=request_timeout,
@@ -44,6 +76,22 @@ def build_llm_client(
             keep_alive=keep_alive,
             device_config=device_config,
         )
+        with _CLIENT_CACHE_LOCK:
+            cached = _CLIENT_CACHE.get(cache_key)
+            if cached is not None:
+                return cached
+            client = HttpxOllamaClient(
+                model=model,
+                base_url=base_api_url,
+                request_timeout=request_timeout,
+                stream_timeout=stream_timeout,
+                concurrency_limit=concurrency_limit,
+                max_retries=max_retries,
+                keep_alive=keep_alive,
+                device_config=device_config,
+            )
+            _CLIENT_CACHE[cache_key] = client
+            return client
 
     raise LLMClientError(f'Неподдерживаемый провайдер LLM: {provider}')
 

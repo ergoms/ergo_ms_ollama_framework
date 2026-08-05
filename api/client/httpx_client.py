@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional
+import time
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import httpx
 
 from .base import BaseLLMClient, LLMClientError
 
 logger = logging.getLogger(__name__)
+
+_MODELS_CACHE_TTL_SECONDS = 60.0
 
 
 def resolve_ollama_model(requested: Optional[str], available: List[str]) -> str:
@@ -51,6 +54,8 @@ class HttpxOllamaClient(BaseLLMClient):
         self._max_retries = max_retries
         self._device_config = device_config or {}
         self._model_resolved = False
+        self._models_cache: Optional[List[str]] = None
+        self._models_cache_at = 0.0
 
         limits = httpx.Limits(
             max_connections=concurrency_limit,
@@ -68,6 +73,30 @@ class HttpxOllamaClient(BaseLLMClient):
     def get_provider_name(self) -> str:
         return 'ollama'
 
+    def _invalidate_models_cache(self) -> None:
+        self._models_cache = None
+        self._models_cache_at = 0.0
+        self._model_resolved = False
+
+    def _fetch_model_names(self) -> List[str]:
+        now = time.monotonic()
+        if (
+            self._models_cache is not None
+            and (now - self._models_cache_at) < _MODELS_CACHE_TTL_SECONDS
+        ):
+            return self._models_cache
+        try:
+            resp = self._client.get('/api/tags', timeout=5.0)
+            resp.raise_for_status()
+            data = resp.json()
+            models = [m.get('name', '') for m in data.get('models', []) if m.get('name')]
+            self._models_cache = models
+            self._models_cache_at = now
+            return models
+        except Exception:
+            self._invalidate_models_cache()
+            raise
+
     def _ensure_resolved_model(self) -> None:
         if self._model_resolved:
             return
@@ -84,10 +113,7 @@ class HttpxOllamaClient(BaseLLMClient):
 
     def check_health(self) -> Dict[str, Any]:
         try:
-            resp = self._client.get('/api/tags', timeout=5.0)
-            resp.raise_for_status()
-            data = resp.json()
-            models = [m.get('name', '') for m in data.get('models', [])]
+            models = self._fetch_model_names()
             resolved = resolve_ollama_model(self.model, models)
             model_loaded = bool(
                 resolved
@@ -111,8 +137,10 @@ class HttpxOllamaClient(BaseLLMClient):
             return {'available': False, 'error': str(exc), 'base_url': self._base_url}
 
     def list_models(self) -> List[str]:
-        health = self.check_health()
-        return health.get('models', [])
+        try:
+            return self._fetch_model_names()
+        except Exception:
+            return []
 
     def _build_generate_payload(
         self,
@@ -259,7 +287,7 @@ class HttpxOllamaClient(BaseLLMClient):
 
     def chat(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         *,
         num_predict: Optional[int] = None,
         temperature: Optional[float] = None,
@@ -358,6 +386,52 @@ class HttpxOllamaClient(BaseLLMClient):
             return content, stats
         return content
 
+    def chat_stream_iter(
+        self,
+        messages: List[Dict[str, Any]],
+        *,
+        num_predict: Optional[int] = None,
+        temperature: Optional[float] = None,
+        seed: Optional[int] = None,
+    ) -> Iterator[str]:
+        payload: Dict[str, Any] = {
+            'model': self.model,
+            'messages': messages,
+            'stream': True,
+            'keep_alive': self._keep_alive,
+            'options': {'top_k': 40, 'top_p': 0.9},
+        }
+        if num_predict is not None:
+            payload['options']['num_predict'] = num_predict
+        if temperature is not None:
+            payload['options']['temperature'] = temperature
+        if seed is not None:
+            payload['options']['seed'] = seed
+        if self._device_config:
+            payload['options'].update(self._device_config)
+
+        self._ensure_resolved_model()
+        payload['model'] = self.model
+
+        try:
+            with self._client.stream('POST', '/api/chat', json=payload) as response:
+                response.raise_for_status()
+                for raw_line in response.iter_lines():
+                    if not raw_line:
+                        continue
+                    try:
+                        data = json.loads(raw_line)
+                    except json.JSONDecodeError:
+                        continue
+                    message = data.get('message', {})
+                    text = message.get('content') if isinstance(message, dict) else None
+                    if text:
+                        yield text
+                    if data.get('done'):
+                        break
+        except httpx.HTTPStatusError as exc:
+            raise self._http_error('chat', exc) from exc
+
     def embed(self, texts: List[str], *, model: Optional[str] = None) -> List[List[float]]:
         embed_model = model or self.model
         payload = {'model': embed_model, 'input': texts}
@@ -406,6 +480,8 @@ class HttpxOllamaClient(BaseLLMClient):
             return ''
 
     def _http_error(self, endpoint: str, exc: httpx.HTTPStatusError) -> LLMClientError:
+        if exc.response.status_code == 404:
+            self._invalidate_models_cache()
         body = self._response_body_text(exc.response)
         if exc.response.status_code == 404:
             error_msg = (

@@ -27,7 +27,7 @@ class BaseLLMClient:
 
     def chat(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         *,
         num_predict: Optional[int] = None,
         temperature: Optional[float] = None,

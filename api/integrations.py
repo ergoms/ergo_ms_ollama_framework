@@ -13,7 +13,7 @@ from .payload_limits import (
     validate_embed_texts,
     validate_prompt_payload,
 )
-from .services.runtime import run_chat, run_embed, run_generate, run_health, run_list_models
+from .services.runtime import run_chat, run_chat_stream, run_embed, run_generate, run_health, run_list_models
 
 
 def _raise_if_invalid(error: Optional[str]) -> None:
@@ -61,7 +61,7 @@ def _generate(
 
 @bridge.provide_op('ollama_framework.chat')
 def _chat(
-    messages: List[Dict[str, str]],
+    messages: List[Dict[str, Any]],
     config: Optional[Dict[str, Any]] = None,
     skip_env_injection: bool = False,
     num_predict: Optional[int] = None,
@@ -84,6 +84,26 @@ def _chat(
         stream_callback=stream_callback,
         format=format,
         return_stats=return_stats,
+    )
+
+
+@bridge.provide_op('ollama_framework.chat_stream')
+def _chat_stream(
+    messages: List[Dict[str, Any]],
+    config: Optional[Dict[str, Any]] = None,
+    skip_env_injection: bool = False,
+    num_predict: Optional[int] = None,
+    temperature: Optional[float] = None,
+    seed: Optional[int] = None,
+):
+    _raise_if_invalid(validate_chat_messages(messages))
+    return run_chat_stream(
+        messages,
+        config=config,
+        skip_env_injection=skip_env_injection,
+        num_predict=num_predict,
+        temperature=temperature,
+        seed=seed,
     )
 
 

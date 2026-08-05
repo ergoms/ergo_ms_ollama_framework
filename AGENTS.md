@@ -20,4 +20,4 @@
 - Вызовы LLM из других модулей — `bridge.call('ollama_framework.<op>', …)`
 - Внутри модуля — `create_client` / runtime / transport
 - Транспорт потребителя — `OLLAMA_FRAMEWORK_TRANSPORT=local|http`
-- Модели setup-full — hook `ollama_models.yaml` (discovery + `ergoms ollama_framework:pull-setup-models`)
+- Модели setup-full — hook `ollama_models.yaml`; loader в `deployment/ollama_models_loader.py`, pull — `ergoms ollama_framework:pull-setup-models`
