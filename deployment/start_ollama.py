@@ -37,6 +37,7 @@ from modules.ollama_framework.deployment.paths import (  # noqa: E402
 )
 from modules.ollama_framework.deployment.process import (  # noqa: E402
     build_foreground_popen_kwargs,
+    find_listener_process,
     find_ollama,
     foreground_child_lifecycle,
     is_ollama_server_available,
@@ -212,11 +213,31 @@ def _prepare_startup(host: Optional[str], port: Optional[str]) -> Optional[int]:
             return 1
         return None
 
+    listener = find_listener_process(listen_port, host=listen_host)
+    listener_name = ''
+    if listener is not None:
+        try:
+            listener_name = (listener.name() or '').lower()
+        except Exception:
+            listener_name = ''
+
+    if listener_name in ('cursor.exe', 'cursor', 'code.exe', 'code'):
+        print(
+            format_console(
+                'error',
+                f'Порт {listen_port} занят Cursor/VS Code (PID: {listener.pid}), не Ollama. '
+                'Закройте проброс в панели Ports (иконка «вилка») или перезапустите Cursor. '
+                'В workspace уже задано remote.portsAttributes.onAutoForward=ignore для 11434.',
+            )
+        )
+        return 1
+
+    listener_hint = f' (PID: {listener.pid}, {listener_name})' if listener is not None else ''
     print(
         format_console(
             'error',
-            f'Порт {listen_port} уже занят другим процессом. '
-            'Проверьте: netstat -ano | findstr {listen_port}',
+            f'Порт {listen_port} уже занят другим процессом{listener_hint}. '
+            f'Проверьте: netstat -ano | findstr {listen_port}',
         )
     )
     return 1

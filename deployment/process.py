@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import signal
-import socket
 import subprocess
 import sys
 import time
@@ -36,13 +35,30 @@ def _parse_base_url_host_port(base_url: str) -> tuple[str, int]:
 
 def is_tcp_port_in_use(host: str, port: int) -> bool:
     """True, если порт уже занят (слушает другой процесс)."""
-    probe_host = host if host not in ('', '0.0.0.0', '::') else '127.0.0.1'
+    return find_listener_process(port, host=host) is not None
+
+
+def find_listener_process(port: int, host: str | None = None) -> Optional[psutil.Process]:
+    """Возвращает процесс, слушающий TCP-порт, или None."""
+    probe_hosts = {host.lower()} if host else set()
+    probe_hosts.update({'127.0.0.1', 'localhost', '0.0.0.0', '::', '::1'})
+
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(0.5)
-            return sock.connect_ex((probe_host, port)) == 0
-    except OSError:
-        return False
+        for conn in psutil.net_connections(kind='inet'):
+            if conn.status != psutil.CONN_LISTEN or not conn.laddr:
+                continue
+            if conn.laddr.port != port:
+                continue
+            laddr_host = (conn.laddr.ip or '').lower()
+            if laddr_host not in probe_hosts and host is not None:
+                continue
+            try:
+                return psutil.Process(conn.pid)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+    except (psutil.AccessDenied, OSError) as exc:
+        logger.debug('Не удалось перечислить сетевые соединения: %s', exc)
+    return None
 
 
 def is_ollama_server_available(timeout: float = 2.0) -> bool:
