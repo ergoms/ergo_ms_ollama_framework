@@ -9,7 +9,7 @@ class OllamaFrameworkConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'modules.ollama_framework.api'
     label = 'ollama_framework'
-    verbose_name = 'Ollama Framework'
+    verbose_name = 'Фреймворк Ollama'
 
     def ready(self):
         from django.conf import settings
