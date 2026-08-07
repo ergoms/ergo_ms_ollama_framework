@@ -3,6 +3,10 @@ from .permissions import MODULE_NAME, OLLAMA_FRAMEWORK_LLM, OLLAMA_FRAMEWORK_VIE
 PERMISSION_CATALOG = {
     'module_name': MODULE_NAME,
     'module_label': 'Фреймворк Ollama',
+    'user_description': (
+        'Сервис языковых моделей для системы. Обычный пользователь работает с ним '
+        'через AI-ассистент; отдельный экран нужен администраторам для статуса и моделей.'
+    ),
     'permissions': {
         OLLAMA_FRAMEWORK_VIEW: 'Просмотр статуса и списка моделей Ollama',
         OLLAMA_FRAMEWORK_LLM: 'Вызовы LLM Ollama (generate, chat, embed)',
