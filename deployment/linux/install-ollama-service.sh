@@ -17,18 +17,20 @@ source "$ERGO_ROOT/core/deployment/linux/lib/services.sh"
 set_service_project_root "$ERGO_ROOT"
 write_env_file "$ERGO_ROOT"
 
-OLLAMA_UNIT=$(cat <<'UNIT'
+OLLAMA_UNIT=$(cat <<UNIT
 [Unit]
 Description=Ergo Ollama Server
 After=network.target
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/default/ergo_ms
-ExecStart=/bin/bash -lc 'cd "$ERGO_ROOT" && ergoms ollama_framework:start-ollama'
+EnvironmentFile=__ERGO_MS_ENV__
+ExecStart=/bin/bash -lc 'cd "\$ERGO_ROOT" && ergoms ollama_framework:start-ollama'
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+Environment=HOME=$ERGO_ROOT/virtual_env/cache/ollama/home
+Environment=OLLAMA_NO_CLOUD=1
 
 [Install]
 WantedBy=multi-user.target

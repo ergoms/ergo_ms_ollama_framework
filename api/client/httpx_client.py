@@ -67,7 +67,13 @@ class HttpxOllamaClient(BaseLLMClient):
             write=request_timeout,
             read=max(stream_timeout, request_timeout * 2),
         )
-        self._client = httpx.Client(base_url=self._base_url, timeout=timeout, limits=limits)
+        # trust_env=False: http_proxy не должен перехватывать localhost:11434
+        self._client = httpx.Client(
+            base_url=self._base_url,
+            timeout=timeout,
+            limits=limits,
+            trust_env=False,
+        )
         self._keep_alive = keep_alive
 
     def get_provider_name(self) -> str:

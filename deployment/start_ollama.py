@@ -33,6 +33,8 @@ from modules.ollama_framework.deployment.paths import (  # noqa: E402
     build_ollama_env,
     get_ollama_base_url,
     get_ollama_dir,
+    get_ollama_runtime_home,
+    purge_ollama_identity_keys,
     resolve_ollama_command,
 )
 from modules.ollama_framework.deployment.process import (  # noqa: E402
@@ -160,6 +162,19 @@ def track_generation_metrics(log_data: Dict[str, Any], metrics: Dict[str, Any]) 
     )
 
 
+def _is_identity_noise(line: str) -> bool:
+    """Скрывает генерацию/вывод ssh-ключа ollama (локальному режиму не нужен)."""
+    stripped = line.strip()
+    if stripped.startswith('ssh-ed25519 '):
+        return True
+    markers = (
+        "Couldn't find '",
+        'Generating new private key',
+        'Your new public key is:',
+    )
+    return any(marker in line for marker in markers)
+
+
 def _read_output(pipe, queue: Queue) -> None:
     try:
         for line in iter(pipe.readline, ''):
@@ -181,13 +196,41 @@ def _resolve_listen_target(
     return listen_host, listen_port
 
 
+def _wait_existing_process(process) -> int:
+    """Держит foreground для systemd Type=simple, пока жив уже запущенный serve."""
+    print(
+        format_console(
+            'warning',
+            f'Ollama уже запущен (PID: {process.pid}), ожидание завершения процесса...',
+        )
+    )
+    try:
+        # psutil.Process.wait() → None; subprocess.Popen.wait() → exit code
+        exit_code = process.wait()
+        return int(exit_code) if exit_code is not None else 0
+    except KeyboardInterrupt:
+        print(format_console('warning', 'Получен сигнал прерывания, завершение работы...'))
+        terminate_ollama_process(process)
+        return 0
+
+
 def _prepare_startup(host: Optional[str], port: Optional[str]) -> Optional[int]:
     listen_host, listen_port = _resolve_listen_target(host, port)
 
     existing = find_ollama()
-    if existing is not None or is_ollama_server_available():
-        print(format_console('warning', 'Ollama уже запущен'))
-        return 0
+    if existing is not None:
+        return _wait_existing_process(existing)
+
+    if is_ollama_server_available():
+        # API отвечает, но PID не нашли — не выходим с 0 (сломает systemd Type=simple)
+        print(
+            format_console(
+                'error',
+                'Ollama API уже отвечает на порту, но процесс не идентифицирован. '
+                'Остановите вручную: ergoms ollama_framework:stop-ollama',
+            )
+        )
+        return 1
 
     if not is_tcp_port_in_use(listen_host, listen_port):
         return None
@@ -297,25 +340,37 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
             output_thread.start()
 
             metrics: Dict[str, Any] = {'total_tokens': 0, 'total_duration': 0}
+            identity_purged = False
+            runtime_home = get_ollama_runtime_home()
 
             while True:
                 try:
                     line = output_queue.get(timeout=0.1)
                     if line is None:
                         break
+                    if _is_identity_noise(line):
+                        continue
                     log_data = parse_ollama_log(line)
                     if log_data:
                         track_generation_metrics(log_data, metrics)
                         print(format_log_line(log_data))
+                        if not identity_purged and 'Listening on' in (log_data.get('message') or ''):
+                            purge_ollama_identity_keys(runtime_home)
+                            identity_purged = True
                     else:
                         print(line)
                 except Empty:
+                    if not identity_purged and is_ollama_server_available():
+                        purge_ollama_identity_keys(runtime_home)
+                        identity_purged = True
                     if process.poll() is not None:
                         while True:
                             try:
                                 line = output_queue.get_nowait()
                                 if line is None:
                                     break
+                                if _is_identity_noise(line):
+                                    continue
                                 log_data = parse_ollama_log(line)
                                 print(format_log_line(log_data) if log_data else line)
                             except Empty:

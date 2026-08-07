@@ -66,7 +66,11 @@ def is_ollama_server_available(timeout: float = 2.0) -> bool:
     try:
         import httpx
 
-        response = httpx.get(f'{get_ollama_base_url()}/api/tags', timeout=timeout)
+        response = httpx.get(
+            f'{get_ollama_base_url()}/api/tags',
+            timeout=timeout,
+            trust_env=False,
+        )
         return response.status_code == 200
     except Exception:
         return False

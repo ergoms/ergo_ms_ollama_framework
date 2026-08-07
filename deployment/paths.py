@@ -78,16 +78,60 @@ def get_ollama_executable(root: Optional[Path] = None) -> Optional[Path]:
     return Path(found) if found else None
 
 
+def get_ollama_runtime_home(root: Optional[Path] = None) -> Path:
+    """Служебный HOME для ollama serve (кэш, не в git)."""
+    return (root or PROJECT_ROOT) / 'virtual_env' / 'cache' / 'ollama' / 'home'
+
+
+def purge_ollama_identity_keys(home: Optional[Path] = None) -> None:
+    """Удаляет id_ed25519*, которые ollama создаёт при старте (для cloud; локально не нужны)."""
+    base = Path(home) if home is not None else get_ollama_runtime_home()
+    ollama_dir = base / '.ollama'
+    for name in ('id_ed25519', 'id_ed25519.pub'):
+        path = ollama_dir / name
+        try:
+            if path.is_file():
+                path.unlink()
+        except OSError:
+            pass
+
+
 def build_ollama_env(
     base: Optional[Mapping[str, str]] = None,
     root: Optional[Path] = None,
 ) -> dict[str, str]:
+    project_root = root or PROJECT_ROOT
     env = dict(os.environ)
     if base:
         env.update(base)
-    env['OLLAMA_MODELS'] = str(ensure_ollama_models_dir(root))
+    env['OLLAMA_MODELS'] = str(ensure_ollama_models_dir(project_root))
 
-    ollama_dir = get_ollama_dir(root)
+    # systemd часто без HOME; бинарь ollama требует переменную.
+    # Держим в cache/ (gitignore), не рядом с packages.
+    ollama_home = get_ollama_runtime_home(project_root)
+    ollama_home.mkdir(parents=True, exist_ok=True)
+    if not (env.get('HOME') or '').strip():
+        env['HOME'] = str(ollama_home)
+
+    # Локальный режим только через env (без server.json / ключей в дереве проекта на виду)
+    # Переопределение: OLLAMA_NO_CLOUD=0 в .env
+    if not (env.get('OLLAMA_NO_CLOUD') or '').strip():
+        env['OLLAMA_NO_CLOUD'] = '1'
+
+    # Локальный API не через корпоративный http_proxy
+    local_hosts = '127.0.0.1,localhost,::1'
+    for key in ('NO_PROXY', 'no_proxy'):
+        current = (env.get(key) or '').strip()
+        if not current:
+            env[key] = local_hosts
+            continue
+        parts = [p.strip() for p in current.split(',') if p.strip()]
+        for host in local_hosts.split(','):
+            if host not in parts:
+                parts.append(host)
+        env[key] = ','.join(parts)
+
+    ollama_dir = get_ollama_dir(project_root)
     if ollama_dir.is_dir():
         path_sep = ';' if platform.system().lower() == 'windows' else ':'
         parts = env.get('PATH', '').split(path_sep) if env.get('PATH') else []

@@ -233,6 +233,7 @@ class OllamaOps:
                 f'{get_ollama_base_url()}/api/chat',
                 json=payload,
                 timeout=180.0,
+                trust_env=False,
             )
             response.raise_for_status()
             data = response.json()
@@ -274,7 +275,11 @@ class OllamaOps:
         raise RuntimeError('Ollama не стал доступен за отведенное время')
 
     def _list_model_names(self) -> list[str]:
-        response = httpx.get(f'{get_ollama_base_url()}/api/tags', timeout=10.0)
+        response = httpx.get(
+            f'{get_ollama_base_url()}/api/tags',
+            timeout=10.0,
+            trust_env=False,
+        )
         response.raise_for_status()
         models = response.json().get('models') or []
         names = []
