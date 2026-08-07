@@ -14,7 +14,7 @@ alwaysApply: false
 - LLM-запросы из **других модулей** — только `bridge.call('ollama_framework.<op>', …)`
 - Внутри этого модуля — `create_client` / `ollama_invoke` / httpx к `:11434` (не экспортировать как публичный контракт)
 - Транспорт потребителя — `OLLAMA_FRAMEWORK_TRANSPORT=local|http` в `.env` (local = ModuleBridge; http = REST этого модуля)
-- Устройство inference — `OLLAMA_COMPUTE_DEVICE=gpu|cpu` (глобально); потребители могут переопределить в своём `config` или `.env`
+- Устройство inference — `OLLAMA_COMPUTE_DEVICE=auto|gpu|cpu` (по умолчанию `auto` — без принудительного `num_gpu`); потребители могут переопределить в своём `config` или `.env`
 - Управление процессом и моделями — `ergoms ollama_framework:start-ollama`, `stop-ollama`, `ollama-status`, `ollama --pull`, `pull-setup-models` (скрипты `deployment/`, без Django); служба `ergo-ollama`
 - Модели для setup-full — hook `ollama_models.yaml` у `ollama_framework` и модулей с `requires: ollama_framework`; discovery/агрегат — [`deployment/ollama_models_loader.py`](../../deployment/ollama_models_loader.py), pull — `ergoms ollama_framework:pull-setup-models` (не в ядре)
 - Учёт в `ergoms resource-usage` — [`process_roles.yaml`](../../process_roles.yaml) модуля, не правки classifier ядра (см. корневой `process-roles.mdc`)

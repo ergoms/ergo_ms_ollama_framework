@@ -4,9 +4,9 @@
 from src.config.env import env
 
 
-def _normalize_compute_device(value: str, *, default: str = 'gpu') -> str:
+def _normalize_compute_device(value: str, *, default: str = 'auto') -> str:
     normalized = (value or '').strip().lower()
-    if normalized in ('gpu', 'cpu'):
+    if normalized in ('gpu', 'cpu', 'auto'):
         return normalized
     return default
 
@@ -21,9 +21,9 @@ OLLAMA_CONCURRENCY_LIMIT = env.int('OLLAMA_CONCURRENCY_LIMIT', default=8)
 OLLAMA_MAX_RETRIES = env.int('OLLAMA_MAX_RETRIES', default=2)
 OLLAMA_KEEP_ALIVE = env.str('OLLAMA_KEEP_ALIVE', default='10m')
 
-# gpu — слои модели на GPU (num_gpu=-1); cpu — только CPU (num_gpu=0)
+# auto — Ollama сам выбирает GPU/CPU; gpu — num_gpu=-1; cpu — num_gpu=0
 OLLAMA_COMPUTE_DEVICE = _normalize_compute_device(
-    env.str('OLLAMA_COMPUTE_DEVICE', default='gpu'),
+    env.str('OLLAMA_COMPUTE_DEVICE', default='auto'),
 )
 
 # local — ModuleBridge in-process; http — REST API ollama_framework

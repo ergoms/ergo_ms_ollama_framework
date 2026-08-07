@@ -8,6 +8,7 @@ from . import settings as of_settings
 
 
 class ComputeDevice(str, Enum):
+    AUTO = 'auto'
     GPU = 'gpu'
     CPU = 'cpu'
 
@@ -24,7 +25,7 @@ class RuntimeLLMConfig:
     base_url: Optional[str] = of_settings.OLLAMA_BASE_URL
     request_timeout: float = of_settings.OLLAMA_REQUEST_TIMEOUT
     stream_timeout: float = of_settings.OLLAMA_STREAM_TIMEOUT
-    compute_device: ComputeDevice = ComputeDevice.GPU
+    compute_device: ComputeDevice = ComputeDevice.AUTO
     concurrency_limit: int = of_settings.OLLAMA_CONCURRENCY_LIMIT
     max_retries: int = of_settings.OLLAMA_MAX_RETRIES
     keep_alive: str = of_settings.OLLAMA_KEEP_ALIVE
@@ -66,7 +67,8 @@ class RuntimeLLMConfig:
             p = data['provider'].lower()
             data['provider'] = LLMProvider.OLLAMA if p == 'llama_cpp' else LLMProvider(p)
         if isinstance(data['compute_device'], str):
-            data['compute_device'] = ComputeDevice(data['compute_device'])
+            parsed = parse_compute_device(data['compute_device'])
+            data['compute_device'] = parsed if parsed is not None else ComputeDevice.AUTO
 
         data['provider_config'].update(provider_overrides)
         data['device_config'].update(device_overrides)
@@ -80,15 +82,16 @@ def parse_compute_device(value: Any) -> Optional[ComputeDevice]:
     if isinstance(value, ComputeDevice):
         return value
     normalized = str(value).strip().lower()
-    if normalized in ('gpu', 'cpu'):
+    if normalized in ('auto', 'gpu', 'cpu'):
         return ComputeDevice(normalized)
     return None
 
 
 def _sync_num_gpu(config: RuntimeLLMConfig) -> None:
+    """auto — не трогаем num_gpu (Ollama сам выберет GPU/CPU)."""
     if config.compute_device == ComputeDevice.CPU:
         config.device_config.setdefault('num_gpu', 0)
-    else:
+    elif config.compute_device == ComputeDevice.GPU:
         config.device_config.setdefault('num_gpu', -1)
 
 
@@ -116,7 +119,8 @@ def _inject_env_defaults(
         config.provider_config['base_url'] = config.base_url
 
     if apply_compute_device:
-        config.compute_device = ComputeDevice(of_settings.OLLAMA_COMPUTE_DEVICE)
+        parsed = parse_compute_device(of_settings.OLLAMA_COMPUTE_DEVICE)
+        config.compute_device = parsed if parsed is not None else ComputeDevice.AUTO
 
     _sync_num_gpu(config)
 
@@ -129,7 +133,7 @@ _FALLBACK_CONFIG = {
     'base_url': 'http://127.0.0.1:11434',
     'request_timeout': 180.0,
     'stream_timeout': 300.0,
-    'compute_device': ComputeDevice.GPU,
+    'compute_device': ComputeDevice.AUTO,
     'concurrency_limit': 8,
     'max_retries': 2,
     'keep_alive': '10m',

@@ -30,7 +30,7 @@ ergoms ollama_framework:ollama --pull mistral:latest
 | `OLLAMA_FRAMEWORK_API_BASE` | Базовый URL API при transport=http |
 | `OLLAMA_REQUEST_TIMEOUT` | Таймаут запроса, сек |
 | `OLLAMA_STREAM_TIMEOUT` | Таймаут streaming, сек |
-| `OLLAMA_COMPUTE_DEVICE` | `gpu` или `cpu` — устройство inference по умолчанию для всех потребителей |
+| `OLLAMA_COMPUTE_DEVICE` | `auto` (по умолчанию — выбор Ollama), либо принудительно `gpu` / `cpu` |
 
 ## ModuleBridge
 
