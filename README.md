@@ -19,7 +19,9 @@ ergoms ollama_framework:ollama-status
 ergoms ollama_framework:ollama --pull mistral:latest
 ```
 
-## Переменные окружения (корневой `.env`)
+## Переменные окружения
+
+Задаются в корневом `.env` и/или в `modules/ollama_framework/.env` (пример — [`.env.example`](.env.example)). Для ops-скриптов `deployment/paths.read_env` читает: переменные процесса → модульный `.env` → корневой `.env`.
 
 | Ключ | Назначение |
 |------|------------|
@@ -34,12 +36,15 @@ ergoms ollama_framework:ollama --pull mistral:latest
 
 ## ModuleBridge
 
-Операции в [`api/integrations.py`](api/integrations.py): `ollama_framework.health`, `chat`, `generate`, `embed`, `list_models`.
+Операции в [`api/integrations.py`](api/integrations.py): `ollama_framework.health`, `list_models`, `generate`, `chat`, `chat_stream`, `embed`.
 
-## REST API
+## REST API и права ADP
 
-- `GET /api/ollama_framework/status/`
-- `GET /api/ollama_framework/models/`
-- `POST /api/ollama_framework/generate/`, `chat/`, `embed/`
+| Эндпоинт | Право |
+|----------|--------|
+| `GET /api/ollama_framework/status/`, `models/` | `ollama_framework_view` |
+| `POST …/generate/`, `chat/`, `embed/` | `ollama_framework_llm` |
 
 Вызовы из других модулей — только через `bridge.call('ollama_framework.<op>', …)`, не через прямой import и не напрямую к `:11434`.
+
+Embeddings идут через `/api/embed`; если сервер отвечает `404`/`501` (старый Ollama или кратковременный отказ), клиент автоматически вызывает legacy `/api/embeddings`.

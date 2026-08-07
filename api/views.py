@@ -15,7 +15,7 @@ from .payload_limits import (
     validate_embed_texts,
     validate_prompt_payload,
 )
-from .permissions import CanViewOllamaFramework
+from .permissions import CanUseOllamaLlm, CanViewOllamaFramework
 from .services.runtime import run_chat, run_embed, run_generate, run_health, run_list_models
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class OllamaModelsView(APIView):
 
 
 class OllamaGenerateView(APIView):
-    permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
+    permission_classes = [permissions.IsAuthenticated, CanUseOllamaLlm]
     throttle_classes = [UserRateThrottle, OllamaLlmThrottle]
     throttle_scope = 'ollama_llm'
 
@@ -97,7 +97,7 @@ class OllamaGenerateView(APIView):
 
 
 class OllamaChatView(APIView):
-    permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
+    permission_classes = [permissions.IsAuthenticated, CanUseOllamaLlm]
     throttle_classes = [UserRateThrottle, OllamaLlmThrottle]
     throttle_scope = 'ollama_llm'
 
@@ -171,7 +171,7 @@ class OllamaChatView(APIView):
 
 
 class OllamaEmbedView(APIView):
-    permission_classes = [permissions.IsAuthenticated, CanViewOllamaFramework]
+    permission_classes = [permissions.IsAuthenticated, CanUseOllamaLlm]
     throttle_classes = [UserRateThrottle, OllamaLlmThrottle]
     throttle_scope = 'ollama_llm'
 

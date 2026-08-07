@@ -8,6 +8,7 @@
 - README и `ergoms.help.yaml`
 - Мост — `api/integrations.py`
 - Ops — `deployment/`, команды `ergoms ollama_framework:…`
+- Env ops — `deployment/paths.py` (`read_env`: process → module `.env` → корневой `.env`)
 
 ## Запрещено
 
@@ -20,4 +21,7 @@
 - Вызовы LLM из других модулей — `bridge.call('ollama_framework.<op>', …)`
 - Внутри модуля — `create_client` / runtime / transport
 - Транспорт потребителя — `OLLAMA_FRAMEWORK_TRANSPORT=local|http`
+- REST: status/models — право `ollama_framework_view`; generate/chat/embed — `ollama_framework_llm`
 - Модели setup-full — hook `ollama_models.yaml`; loader в `deployment/ollama_models_loader.py`, pull — `ergoms ollama_framework:pull-setup-models`
+- Embed: сначала `/api/embed`, при 404/501 — fallback на legacy `/api/embeddings` (`prompt`)
+- Документация модуля — синхронизировать с кодом (корневой `module-docs.mdc`)

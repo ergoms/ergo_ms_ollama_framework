@@ -438,30 +438,136 @@ class HttpxOllamaClient(BaseLLMClient):
         except httpx.HTTPStatusError as exc:
             raise self._http_error('chat', exc) from exc
 
+    @staticmethod
+    def _parse_embed_response(data: Dict[str, Any]) -> List[List[float]]:
+        embeddings = data.get('embeddings')
+        if embeddings is None and 'embedding' in data:
+            single = data['embedding']
+            if isinstance(single, list) and single and isinstance(single[0], (int, float)):
+                return [single]
+            if isinstance(single, list):
+                return [single]
+        if embeddings is None:
+            raise LLMClientError(
+                f'Ollama embed: нет embeddings в ответе, ключи: {list(data.keys())}'
+            )
+        if isinstance(embeddings, list) and embeddings and isinstance(embeddings[0], (int, float)):
+            return [embeddings]
+        if not isinstance(embeddings, list):
+            raise LLMClientError(
+                f'Ollama embed: embeddings не список: {type(embeddings).__name__}'
+            )
+        return embeddings
+
+    def _embed_error_message(self, *, model: str, status: int, body: str) -> str:
+        body_l = (body or '').lower()
+        if status == 501 or 'does not support embeddings' in body_l or '--embeddings' in body_l:
+            return (
+                f'Модель {model!r} не поддерживает embeddings. '
+                f'Укажите embedding-модель (OLLAMA_EMBEDDINGS_MODEL), например embeddinggemma.'
+            )
+        detail = (body or '').strip()
+        if detail:
+            return f'Ollama embed API ошибка {status} (модель {model!r}): {detail[:300]}'
+        return f'Ollama embed API ошибка {status} (модель {model!r})'
+
+    def _embed_legacy_prompt(self, texts: List[str], *, model: str) -> List[List[float]]:
+        """Legacy /api/embeddings (prompt) — для Ollama без /api/embed."""
+        vectors: List[List[float]] = []
+        for text in texts:
+            response = self._client.post(
+                '/api/embeddings',
+                json={'model': model, 'prompt': text},
+            )
+            if response.status_code >= 400:
+                raise LLMClientError(
+                    self._embed_error_message(
+                        model=model,
+                        status=response.status_code,
+                        body=self._response_body_text(response),
+                    )
+                )
+            parsed = self._parse_embed_response(response.json())
+            if not parsed:
+                raise LLMClientError('Ollama /api/embeddings вернул пустой embedding')
+            vectors.append(parsed[0])
+        return vectors
+
     def embed(self, texts: List[str], *, model: Optional[str] = None) -> List[List[float]]:
-        embed_model = model or self.model
+        if not texts:
+            return []
+
+        # Подбираем установленное имя модели (embeddinggemma → embeddinggemma:latest).
+        requested = model or self.model
+        available = self.list_models()
+        embed_model = resolve_ollama_model(requested, available) or requested
+        if embed_model != requested:
+            logger.info(
+                'Embed-модель %r не найдена среди установленных, используем %r',
+                requested,
+                embed_model,
+            )
+
         payload = {'model': embed_model, 'input': texts}
         last_error: Optional[Exception] = None
         for attempt in range(self._max_retries + 1):
             try:
                 response = self._client.post('/api/embed', json=payload)
-                response.raise_for_status()
-                data = response.json()
-                embeddings = data.get('embeddings')
-                if embeddings is None and 'embedding' in data:
-                    single = data['embedding']
-                    if isinstance(single, list) and single and isinstance(single[0], (int, float)):
-                        return [single]
-                    if isinstance(single, list):
-                        return [single]
-                if embeddings is None:
+                body = self._response_body_text(response)
+                # 501 «does not support embeddings» — модель не embedding; fallback бесполезен.
+                if response.status_code == 501 and (
+                    'does not support embeddings' in body.lower()
+                    or '--embeddings' in body.lower()
+                ):
                     raise LLMClientError(
-                        f'Ollama embed: нет embeddings в ответе, ключи: {list(data.keys())}'
+                        self._embed_error_message(
+                            model=embed_model,
+                            status=501,
+                            body=body,
+                        )
                     )
-                if isinstance(embeddings, list) and embeddings and isinstance(embeddings[0], (int, float)):
-                    return [embeddings]
-                return embeddings
-            except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError) as exc:
+                if response.status_code in (404, 501):
+                    logger.warning(
+                        'Ollama /api/embed вернул %s, fallback на /api/embeddings',
+                        response.status_code,
+                    )
+                    return self._embed_legacy_prompt(texts, model=embed_model)
+                response.raise_for_status()
+                return self._parse_embed_response(response.json())
+            except LLMClientError:
+                raise
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code if exc.response is not None else None
+                body = self._response_body_text(exc.response) if exc.response is not None else ''
+                if status == 501 and (
+                    'does not support embeddings' in body.lower()
+                    or '--embeddings' in body.lower()
+                ):
+                    raise LLMClientError(
+                        self._embed_error_message(model=embed_model, status=501, body=body)
+                    ) from exc
+                if status in (404, 501):
+                    logger.warning(
+                        'Ollama /api/embed HTTP %s, fallback на /api/embeddings',
+                        status,
+                    )
+                    return self._embed_legacy_prompt(texts, model=embed_model)
+                if status is not None and 400 <= status < 500:
+                    raise LLMClientError(
+                        self._embed_error_message(
+                            model=embed_model,
+                            status=status,
+                            body=body,
+                        )
+                    ) from exc
+                last_error = exc
+                logger.warning(
+                    'Ошибка Ollama embed (попытка %s/%s): %s',
+                    attempt + 1,
+                    self._max_retries + 1,
+                    exc,
+                )
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last_error = exc
                 logger.warning(
                     'Ошибка Ollama embed (попытка %s/%s): %s',

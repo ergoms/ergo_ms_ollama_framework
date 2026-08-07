@@ -22,6 +22,9 @@ alwaysApply: false
 - Setup Full / Start All — [`vscode.tasks.yaml`](../../vscode.tasks.yaml) (`include_in: setup-full` / `start-all`, см. корневой `module-vscode-tasks.mdc`)
 - MCP Cursor — `modules/ollama_framework/mcp/`, имя сервера `ergo-module-ollama-framework` (см. корневой `mcp.mdc`)
 - Проверка health REST — `GET /api/ollama_framework/status/` (для UI своего модуля или ops; другие модули — через bridge или свой proxy)
+- Права ADP: `ollama_framework_view` (status/models), `ollama_framework_llm` (generate/chat/embed)
+- Ops env — `deployment/paths.read_env` читает модульный и корневой `.env` (модульный перекрывает корневой при равном ключе в файлах; `os.environ` важнее обоих)
+- Документация модуля — синхронизировать `AGENTS.md` / README / это правило с контрактами (корневой `module-docs.mdc`)
 
 ## Запрещено
 
@@ -57,7 +60,7 @@ bridge.call(
 
 ## ModuleBridge
 
-Операции: `ollama_framework.health`, `chat`, `generate`, `embed`, `list_models` — регистрация в [`integrations.py`](../../api/integrations.py).
+Операции: `ollama_framework.health`, `list_models`, `generate`, `chat`, `chat_stream`, `embed` — регистрация в [`integrations.py`](../../api/integrations.py).
 
 `create_client` / `ollama_invoke` — **внутренний** API модуля; не документируй и не используй из `modules/<other>/`.
 
@@ -66,6 +69,7 @@ bridge.call(
 | Тема | Файл |
 |------|------|
 | Модули, мост | корневой `modules.mdc` |
+| Документация модуля | корневой `module-docs.mdc` |
 | ergoms | корневой `no-direct-manage-py.mdc` |
 | MCP Cursor | корневой `mcp.mdc` |
 | Роли процессов | корневой `process-roles.mdc` |

@@ -11,20 +11,37 @@ from typing import Mapping, Optional
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
-def read_env(name: str, default: str = '') -> str:
-    value = os.environ.get(name)
-    if value is not None and str(value).strip() != '':
-        return str(value).strip()
-    env_path = PROJECT_ROOT / '.env'
+def _read_env_file_value(env_path: Path, name: str) -> Optional[str]:
     if not env_path.is_file():
-        return default
-    for line in env_path.read_text(encoding='utf-8').splitlines():
+        return None
+    try:
+        lines = env_path.read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return None
+    for line in lines:
         line = line.strip()
         if not line or line.startswith('#') or '=' not in line:
             continue
         key, _, raw = line.partition('=')
         if key.strip() == name:
             return raw.strip().strip('"').strip("'")
+    return None
+
+
+def read_env(name: str, default: str = '') -> str:
+    """Читает переменную: os.environ → modules/ollama_framework/.env → корневой .env."""
+    value = os.environ.get(name)
+    if value is not None and str(value).strip() != '':
+        return str(value).strip()
+    module_val = _read_env_file_value(
+        PROJECT_ROOT / 'modules' / 'ollama_framework' / '.env',
+        name,
+    )
+    if module_val is not None and str(module_val).strip() != '':
+        return str(module_val).strip()
+    root_val = _read_env_file_value(PROJECT_ROOT / '.env', name)
+    if root_val is not None and str(root_val).strip() != '':
+        return str(root_val).strip()
     return default
 
 
