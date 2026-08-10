@@ -38,12 +38,12 @@ from modules.ollama_framework.deployment.paths import (  # noqa: E402
     resolve_ollama_command,
 )
 from modules.ollama_framework.deployment.process import (  # noqa: E402
-    build_foreground_popen_kwargs,
     find_listener_process,
     find_ollama,
     foreground_child_lifecycle,
     is_ollama_server_available,
     is_tcp_port_in_use,
+    popen_foreground_child,
     terminate_ollama_process,
 )
 
@@ -301,6 +301,7 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
     working_dir = ollama_dir if ollama_dir.is_dir() else PROJECT_ROOT
     process: subprocess.Popen[str] | None = None
     session_owned = False
+    console_handler_ref: list[Any] = []
 
     def _cleanup_process() -> None:
         nonlocal session_owned
@@ -314,14 +315,34 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
         _cleanup_process()
         raise SystemExit(128 + signum if signum else 0)
 
+    def _register_windows_console_close_handler() -> None:
+        """CTRL_CLOSE_EVENT при закрытии панели терминала (запасной путь к Job Object)."""
+        if sys.platform != 'win32':
+            return
+        import ctypes
+
+        handler_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)
+
+        @handler_type
+        def _console_ctrl_handler(ctrl_type: int) -> bool:
+            # 0=C, 1=BREAK, 2=CLOSE — закрытие вкладки/окна терминала
+            if ctrl_type in (0, 1, 2):
+                _cleanup_process()
+                return False
+            return False
+
+        console_handler_ref.append(_console_ctrl_handler)
+        ctypes.windll.kernel32.SetConsoleCtrlHandler(_console_ctrl_handler, True)
+
     if hasattr(signal, 'SIGTERM'):
         signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
     atexit.register(_cleanup_process)
+    _register_windows_console_close_handler()
 
     try:
         print(format_console('info', 'Запуск Ollama Server'))
-        process = subprocess.Popen(
+        process = popen_foreground_child(
             cmd,
             cwd=str(working_dir),
             stdout=subprocess.PIPE,
@@ -329,7 +350,6 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
             universal_newlines=True,
             bufsize=1,
             env=build_ollama_env(),
-            **build_foreground_popen_kwargs(),
         )
         session_owned = True
 

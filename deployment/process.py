@@ -199,7 +199,20 @@ def _linux_child_preexec() -> None:
     libc.prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
 
 
-def _attach_windows_kill_job(process: subprocess.Popen[Any]) -> Any | None:
+_CREATE_SUSPENDED = 0x00000004
+_CREATE_BREAKAWAY_FROM_JOB = getattr(
+    subprocess,
+    'CREATE_BREAKAWAY_FROM_JOB',
+    0x01000000,
+)
+_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+_JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
+_PROCESS_ALL_ACCESS = 0x000F0000 | 0x00100000 | 0xFFFF
+_TH32CS_SNAPTHREAD = 0x00000004
+_THREAD_SUSPEND_RESUME = 0x0002
+
+
+def _windows_job_structures():
     import ctypes
     from ctypes import wintypes
 
@@ -236,31 +249,99 @@ def _attach_windows_kill_job(process: subprocess.Popen[Any]) -> Any | None:
             ('PeakJobMemoryUsed', ctypes.c_size_t),
         ]
 
+    class THREADENTRY32(ctypes.Structure):
+        _fields_ = [
+            ('dwSize', wintypes.DWORD),
+            ('cntUsage', wintypes.DWORD),
+            ('th32ThreadID', wintypes.DWORD),
+            ('th32OwnerProcessID', wintypes.DWORD),
+            ('tpBasePri', wintypes.LONG),
+            ('tpDeltaPri', wintypes.LONG),
+            ('dwFlags', wintypes.DWORD),
+        ]
+
+    return JOBOBJECT_EXTENDED_LIMIT_INFORMATION, THREADENTRY32
+
+
+def _resume_windows_process_threads(pid: int) -> None:
+    """Снимает CREATE_SUSPENDED с потоков процесса (обычно один primary)."""
+    import ctypes
+
+    _, thread_entry_cls = _windows_job_structures()
+    kernel32 = ctypes.windll.kernel32
+    snap = kernel32.CreateToolhelp32Snapshot(_TH32CS_SNAPTHREAD, 0)
+    invalid = ctypes.c_void_p(-1).value
+    if snap in (-1, invalid, 0xFFFFFFFF):
+        logger.warning('Не удалось снять CREATE_SUSPENDED с PID=%s (snapshot)', pid)
+        return
+
+    try:
+        entry = thread_entry_cls()
+        entry.dwSize = ctypes.sizeof(thread_entry_cls)
+        if not kernel32.Thread32First(snap, ctypes.byref(entry)):
+            return
+        while True:
+            if entry.th32OwnerProcessID == pid:
+                thread = kernel32.OpenThread(
+                    _THREAD_SUSPEND_RESUME,
+                    False,
+                    entry.th32ThreadID,
+                )
+                if thread:
+                    try:
+                        kernel32.ResumeThread(thread)
+                    finally:
+                        kernel32.CloseHandle(thread)
+            if not kernel32.Thread32Next(snap, ctypes.byref(entry)):
+                break
+    finally:
+        kernel32.CloseHandle(snap)
+
+
+def _attach_windows_kill_job(process: subprocess.Popen[Any]) -> Any | None:
+    """
+    Привязывает процесс к Job Object с KILL_ON_JOB_CLOSE.
+
+    В терминале Cursor/VS Code родитель уже в job: без CREATE_BREAKAWAY
+    AssignProcessToJobObject часто падает, и ollama переживает закрытие панели.
+    """
+    import ctypes
+
+    job_info_cls, _ = _windows_job_structures()
     kernel32 = ctypes.windll.kernel32
     job = kernel32.CreateJobObjectW(None, None)
     if not job:
+        logger.warning('CreateJobObjectW не удался для PID=%s', process.pid)
         return None
 
-    info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-    info.BasicLimitInformation.LimitFlags = 0x00002000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    info = job_info_cls()
+    info.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
     if not kernel32.SetInformationJobObject(
         job,
-        9,  # JobObjectExtendedLimitInformation
+        _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
         ctypes.byref(info),
         ctypes.sizeof(info),
     ):
         kernel32.CloseHandle(job)
+        logger.warning('SetInformationJobObject не удался для PID=%s', process.pid)
         return None
 
-    access = 0x000F0000 | 0x00100000 | 0xFFFF
-    process_handle = kernel32.OpenProcess(access, False, process.pid)
+    process_handle = kernel32.OpenProcess(_PROCESS_ALL_ACCESS, False, process.pid)
     if not process_handle:
         kernel32.CloseHandle(job)
+        logger.warning('OpenProcess не удался для PID=%s', process.pid)
         return None
 
     try:
         if not kernel32.AssignProcessToJobObject(job, process_handle):
+            err = ctypes.GetLastError()
             kernel32.CloseHandle(job)
+            logger.warning(
+                'AssignProcessToJobObject не удался для PID=%s (winerror=%s). '
+                'При закрытии терминала Ollama может остаться запущенной.',
+                process.pid,
+                err,
+            )
             return None
     finally:
         kernel32.CloseHandle(process_handle)
@@ -268,11 +349,53 @@ def _attach_windows_kill_job(process: subprocess.Popen[Any]) -> Any | None:
     return job
 
 
-def build_foreground_popen_kwargs() -> dict[str, Any]:
+def build_foreground_popen_kwargs(*, allow_breakaway: bool = True) -> dict[str, Any]:
     """Параметры Popen: дочерний процесс завершается вместе с обёрткой."""
     if sys.platform == 'win32':
-        return {'creationflags': subprocess.CREATE_NO_WINDOW}
+        # BREAKAWAY — выйти из job терминала Cursor; SUSPENDED — успеть
+        # AssignProcessToJobObject до старта serve; NO_WINDOW — без лишней консоли.
+        flags = subprocess.CREATE_NO_WINDOW | _CREATE_SUSPENDED
+        if allow_breakaway:
+            flags |= _CREATE_BREAKAWAY_FROM_JOB
+        return {'creationflags': flags}
     return {'preexec_fn': _linux_child_preexec}
+
+
+def popen_foreground_child(cmd: list[str], **popen_kwargs: Any) -> subprocess.Popen[Any]:
+    """
+    Запускает foreground-дочерний процесс с привязкой к жизненному циклу обёртки.
+
+    На Windows сначала пробует CREATE_BREAKAWAY_FROM_JOB (нужно в терминале Cursor);
+    если родительский job запрещает breakaway — повторяет без него.
+    """
+    if sys.platform != 'win32':
+        return subprocess.Popen(
+            cmd,
+            **popen_kwargs,
+            **build_foreground_popen_kwargs(),
+        )
+
+    try:
+        return subprocess.Popen(
+            cmd,
+            **popen_kwargs,
+            **build_foreground_popen_kwargs(allow_breakaway=True),
+        )
+    except FileNotFoundError:
+        raise
+    except OSError as exc:
+        # ERROR_ACCESS_DENIED (5): job терминала без JOB_OBJECT_LIMIT_BREAKAWAY_OK
+        if getattr(exc, 'winerror', None) != 5:
+            raise
+        logger.warning(
+            'CREATE_BREAKAWAY_FROM_JOB недоступен (%s), повтор без breakaway',
+            exc,
+        )
+        return subprocess.Popen(
+            cmd,
+            **popen_kwargs,
+            **build_foreground_popen_kwargs(allow_breakaway=False),
+        )
 
 
 @contextmanager
@@ -283,16 +406,21 @@ def foreground_child_lifecycle(
     Держит дочерний процесс привязанным к жизненному циклу Python.
 
     На Windows — Job Object KILL_ON_JOB_CLOSE; на Linux — PR_SET_PDEATHSIG.
-  """
+    """
     job_handle = None
     if sys.platform == 'win32':
-        job_handle = _attach_windows_kill_job(process)
+        try:
+            job_handle = _attach_windows_kill_job(process)
+        finally:
+            # Даже если job не создался — нельзя оставлять процесс в SUSPENDED.
+            _resume_windows_process_threads(process.pid)
     try:
         yield process
     finally:
         if job_handle is not None:
             import ctypes
 
+            # Закрытие последнего handle job → KILL_ON_JOB_CLOSE убивает ollama.
             ctypes.windll.kernel32.CloseHandle(job_handle)
 
 

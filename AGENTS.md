@@ -23,5 +23,6 @@
 - Транспорт потребителя — `OLLAMA_FRAMEWORK_TRANSPORT=local|http`
 - REST: status/models — право `ollama_framework_view`; generate/chat/embed — `ollama_framework_llm`
 - Модели setup-full — hook `ollama_models.yaml`; loader в `deployment/ollama_models_loader.py`, pull — `ergoms ollama_framework:pull-setup-models` (фоновый serve через `start_ollama_background` → `logs/ollama-serve.log`, не `stderr=PIPE`)
+- Foreground `start-ollama` на Windows — Job Object `KILL_ON_JOB_CLOSE` + `CREATE_BREAKAWAY_FROM_JOB` (иначе в терминале Cursor serve переживает закрытие вкладки); фоновый `start_ollama_background` по-прежнему переживает выход родителя
 - Embed: сначала `/api/embed`, при 404/501 — fallback на legacy `/api/embeddings` (`prompt`)
 - Документация модуля — синхронизировать с кодом (корневой `module-docs.mdc`)
