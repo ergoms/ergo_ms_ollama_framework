@@ -20,7 +20,7 @@ ergoms ollama_framework:logs-ollama
 ergoms ollama_framework:ollama --pull mistral:latest
 ```
 
-`pull-setup-models` (и setup-full) при необходимости поднимают Ollama в фоне; логи — `logs/ollama-serve.log` (`ergoms ollama_framework:logs-ollama`).
+`pull-setup-models` (и setup-full) при необходимости поднимают Ollama в фоне; логи — `logs/ollama-serve.log` (`ergoms ollama_framework:logs-ollama`). По окончании `setup-full` процесс останавливается через `host_lifecycle.yaml` (`stop-ollama`).
 
 ## Переменные окружения
 
