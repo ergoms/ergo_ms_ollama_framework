@@ -16,8 +16,11 @@ ergoms ollama_framework:install-ollama
 ergoms ollama_framework:pull-setup-models
 ergoms ollama_framework:start-ollama
 ergoms ollama_framework:ollama-status
+ergoms ollama_framework:logs-ollama
 ergoms ollama_framework:ollama --pull mistral:latest
 ```
+
+`pull-setup-models` (и setup-full) при необходимости поднимают Ollama в фоне; логи — `logs/ollama-serve.log` (`ergoms ollama_framework:logs-ollama`).
 
 ## Переменные окружения
 

@@ -24,9 +24,12 @@ for _path in (DEPLOYMENT_DIR, SCRIPTS_DIR):
         sys.path.insert(0, str(_path))
 
 from console_tags import configure_stdio_utf8, format_console  # noqa: E402
-from log_env import resolve_logs_dir  # noqa: E402
+from modules.ollama_framework.deployment.paths import (  # noqa: E402
+    OLLAMA_SERVE_LOG_NAME,
+    get_ollama_serve_log_path,
+)
 
-OLLAMA_LOG_NAME = 'ollama-serve.log'
+OLLAMA_LOG_NAME = OLLAMA_SERVE_LOG_NAME
 OLLAMA_UNIT = 'ergo-ollama'
 
 
@@ -91,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     lines = max(1, int(args.lines or 500))
 
-    log_path = resolve_logs_dir(PROJECT_ROOT) / OLLAMA_LOG_NAME
+    log_path = get_ollama_serve_log_path(PROJECT_ROOT)
     if log_path.is_file():
         return _follow_file(log_path, lines)
 

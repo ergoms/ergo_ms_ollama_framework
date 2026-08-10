@@ -100,6 +100,22 @@ def get_ollama_runtime_home(root: Optional[Path] = None) -> Path:
     return (root or PROJECT_ROOT) / 'virtual_env' / 'cache' / 'ollama' / 'home'
 
 
+OLLAMA_SERVE_LOG_NAME = 'ollama-serve.log'
+
+
+def get_ollama_serve_log_path(root: Optional[Path] = None) -> Path:
+    """Файл логов фонового ``ollama serve`` (``logs/ollama-serve.log``)."""
+    project_root = root or PROJECT_ROOT
+    custom = read_env('ERGO_LOGS_DIR', '')
+    if custom:
+        logs_dir = Path(custom)
+        if not logs_dir.is_absolute():
+            logs_dir = project_root / logs_dir
+    else:
+        logs_dir = project_root / 'logs'
+    return logs_dir / OLLAMA_SERVE_LOG_NAME
+
+
 def purge_ollama_identity_keys(home: Optional[Path] = None) -> None:
     """Удаляет id_ed25519*, которые ollama создаёт при старте (для cloud; локально не нужны)."""
     base = Path(home) if home is not None else get_ollama_runtime_home()

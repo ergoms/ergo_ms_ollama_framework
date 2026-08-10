@@ -18,6 +18,7 @@ from .paths import (
     build_ollama_env,
     get_ollama_base_url,
     get_ollama_dir,
+    get_ollama_serve_log_path,
     resolve_ollama_command,
 )
 
@@ -295,12 +296,30 @@ def foreground_child_lifecycle(
             ctypes.windll.kernel32.CloseHandle(job_handle)
 
 
+def _read_log_tail(path: Path, *, max_bytes: int = 4000) -> str:
+    """Хвост файла лога для диагностики падения при старте."""
+    try:
+        with path.open('rb') as handle:
+            handle.seek(0, 2)
+            size = handle.tell()
+            handle.seek(max(0, size - max_bytes))
+            raw = handle.read()
+        return raw.decode('utf-8', errors='replace').strip()
+    except OSError:
+        return ''
+
+
 def start_ollama_background(
     api_dir: Optional[Path] = None,
     extra_args: Optional[List[str]] = None,
 ) -> bool:
     """
     Запускает Ollama serve в фоновом режиме.
+
+    Stdout/stderr пишутся в ``logs/ollama-serve.log``. Нельзя держать
+    ``stderr=PIPE``: после выхода родительского процесса (setup-full /
+    pull-setup-models) закрытый пайп убивает serve SIGPIPE при первой
+    нагрузке (embed / загрузка модели).
 
     Args:
         api_dir: рабочая директория процесса; по умолчанию каталог пакета Ollama
@@ -325,11 +344,21 @@ def start_ollama_background(
     else:
         working_dir = ollama_dir.parent
 
+    log_path = get_ollama_serve_log_path()
+    log_handle = None
     try:
-        popen_kwargs = {
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        # line buffering для текста; при ошибке — без буфера
+        log_handle = open(log_path, 'a', encoding='utf-8', buffering=1)
+        log_handle.write(
+            f'\n--- ollama serve start {time.strftime("%Y-%m-%d %H:%M:%S")} ---\n'
+        )
+        log_handle.flush()
+
+        popen_kwargs: dict[str, Any] = {
             'cwd': str(working_dir),
-            'stdout': subprocess.DEVNULL,
-            'stderr': subprocess.PIPE,
+            'stdout': log_handle,
+            'stderr': subprocess.STDOUT,
             'env': build_ollama_env(),
         }
         if sys.platform == 'win32':
@@ -338,6 +367,9 @@ def start_ollama_background(
             popen_kwargs['start_new_session'] = True
 
         process = subprocess.Popen(cmd, **popen_kwargs)
+        # У родителя свой fd закрываем: у ребёнка остаётся унаследованный дескриптор файла.
+        log_handle.close()
+        log_handle = None
 
         for _ in range(15):
             time.sleep(1)
@@ -345,13 +377,11 @@ def start_ollama_background(
                 logger.info('Ollama API доступен после фонового запуска')
                 return True
             if process.poll() is not None:
-                stderr = ''
-                if process.stderr is not None:
-                    stderr = process.stderr.read().decode('utf-8', errors='replace').strip()
                 if is_ollama_server_available():
                     return True
+                stderr = _read_log_tail(log_path)
                 if stderr:
-                    logger.error('Ollama завершился при запуске: %s', stderr)
+                    logger.error('Ollama завершился при запуске: %s', stderr[-1500:])
                 else:
                     logger.error('Ollama процесс завершился сразу после запуска')
                 return False
@@ -371,3 +401,9 @@ def start_ollama_background(
     except Exception as exc:
         logger.error('Ошибка при запуске Ollama: %s', exc)
         return False
+    finally:
+        if log_handle is not None:
+            try:
+                log_handle.close()
+            except OSError:
+                pass
