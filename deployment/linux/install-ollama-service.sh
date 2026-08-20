@@ -17,6 +17,21 @@ source "$ERGO_ROOT/core/deployment/linux/lib/services.sh"
 set_service_project_root "$ERGO_ROOT"
 write_env_file "$ERGO_ROOT"
 
+_ollama_log_path() {
+  local root="$1"
+  local py="$root/virtual_env/python/bin/python"
+  local script="$root/core/deployment/scripts/log_env.py"
+  if [[ -x "$py" && -f "$script" ]]; then
+    "$py" "$script" path OLLAMA "$root"
+    return 0
+  fi
+  echo "$root/logs/ollama-serve.log"
+}
+
+OLLAMA_LOG_PATH="$(_ollama_log_path "$ERGO_ROOT")"
+mkdir -p "$(dirname "$OLLAMA_LOG_PATH")"
+: >>"$OLLAMA_LOG_PATH"
+
 OLLAMA_UNIT=$(cat <<UNIT
 [Unit]
 Description=Ergo Ollama Server
@@ -31,6 +46,8 @@ RestartSec=5
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=$ERGO_ROOT/virtual_env/cache/ollama/home
 Environment=OLLAMA_NO_CLOUD=1
+StandardOutput=append:$OLLAMA_LOG_PATH
+StandardError=append:$OLLAMA_LOG_PATH
 
 [Install]
 WantedBy=multi-user.target

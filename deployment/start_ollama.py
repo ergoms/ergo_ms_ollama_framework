@@ -18,7 +18,6 @@ from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
@@ -31,11 +30,13 @@ if str(DEPLOYMENT_DIR) not in sys.path:
 from console_tags import configure_stdio_utf8, format_console  # noqa: E402
 from modules.ollama_framework.deployment.paths import (  # noqa: E402
     build_ollama_env,
-    get_ollama_base_url,
+    format_ollama_host,
     get_ollama_dir,
     get_ollama_runtime_home,
+    get_ollama_serve_log_path,
     purge_ollama_identity_keys,
     resolve_ollama_command,
+    resolve_ollama_listen_addr,
 )
 from modules.ollama_framework.deployment.process import (  # noqa: E402
     find_listener_process,
@@ -57,7 +58,7 @@ def parse_ollama_log(line: str) -> Optional[Dict[str, Any]]:
     time_str, level, source, msg = match.groups()
     try:
         time_obj = datetime.fromisoformat(time_str.replace('+', '+').replace('Z', '+00:00'))
-        time_formatted = time_obj.strftime('%H:%M:%S')
+        time_formatted = time_obj.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
         time_formatted = time_str.split('T')[1].split('+')[0] if 'T' in time_str else time_str
 
@@ -106,7 +107,26 @@ def format_log_line(log_data: Dict[str, Any]) -> str:
             f"{extra.get('total unused blobs removed', '0')}"
         )
 
-    return f'{time_str} [{level}] {source} {formatted_msg}'
+    return f'[{level.upper()}] {time_str} ollama {source} {formatted_msg}'
+
+
+def _append_serve_log(handle: Any, line: str) -> None:
+    if handle is None:
+        return
+    handle.write(line if line.endswith('\n') else f'{line}\n')
+    handle.flush()
+
+
+def _emit_serve_line(line: str, log_handle: Any) -> Optional[Dict[str, Any]]:
+    """Сырая строка — в файл; в терминал — разбор в формате verbose."""
+    if _is_identity_noise(line):
+        return None
+    _append_serve_log(log_handle, line)
+    log_data = parse_ollama_log(line)
+    if not sys.stdout.isatty():
+        return log_data
+    print(format_log_line(log_data) if log_data else line)
+    return log_data
 
 
 def track_generation_metrics(log_data: Dict[str, Any], metrics: Dict[str, Any]) -> None:
@@ -189,11 +209,7 @@ def _resolve_listen_target(
     host: Optional[str],
     port: Optional[str],
 ) -> tuple[str, int]:
-    base_url = get_ollama_base_url()
-    parsed = urlparse(base_url)
-    listen_host = host or parsed.hostname or '127.0.0.1'
-    listen_port = int(port or parsed.port or 11434)
-    return listen_host, listen_port
+    return resolve_ollama_listen_addr(override_host=host, override_port=port)
 
 
 def _wait_existing_process(process) -> int:
@@ -291,11 +307,8 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
     if prepared is not None:
         return prepared
 
+    listen_host, listen_port = _resolve_listen_target(host, port)
     cmd = resolve_ollama_command('serve')
-    if host:
-        cmd.extend(['--host', str(host)])
-    if port:
-        cmd.extend(['--port', str(port)])
 
     ollama_dir = get_ollama_dir()
     working_dir = ollama_dir if ollama_dir.is_dir() else PROJECT_ROOT
@@ -340,8 +353,16 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
     atexit.register(_cleanup_process)
     _register_windows_console_close_handler()
 
+    log_handle = None
     try:
         print(format_console('info', 'Запуск Ollama Server'))
+        log_path = get_ollama_serve_log_path()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_handle = open(log_path, 'a', encoding='utf-8', buffering=1)
+        log_handle.write(
+            f'\n--- ollama serve start {time.strftime("%Y-%m-%d %H:%M:%S")} ---\n'
+        )
+        log_handle.flush()
         process = popen_foreground_child(
             cmd,
             cwd=str(working_dir),
@@ -349,7 +370,9 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
             stderr=subprocess.STDOUT,
             universal_newlines=True,
             bufsize=1,
-            env=build_ollama_env(),
+            env=build_ollama_env(
+                {'OLLAMA_HOST': format_ollama_host(listen_host, listen_port)},
+            ),
         )
         session_owned = True
 
@@ -368,17 +391,12 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
                     line = output_queue.get(timeout=0.1)
                     if line is None:
                         break
-                    if _is_identity_noise(line):
-                        continue
-                    log_data = parse_ollama_log(line)
+                    log_data = _emit_serve_line(line, log_handle)
                     if log_data:
                         track_generation_metrics(log_data, metrics)
-                        print(format_log_line(log_data))
                         if not identity_purged and 'Listening on' in (log_data.get('message') or ''):
                             purge_ollama_identity_keys(runtime_home)
                             identity_purged = True
-                    else:
-                        print(line)
                 except Empty:
                     if not identity_purged and is_ollama_server_available():
                         purge_ollama_identity_keys(runtime_home)
@@ -389,10 +407,9 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
                                 line = output_queue.get_nowait()
                                 if line is None:
                                     break
-                                if _is_identity_noise(line):
-                                    continue
-                                log_data = parse_ollama_log(line)
-                                print(format_log_line(log_data) if log_data else line)
+                                log_data = _emit_serve_line(line, log_handle)
+                                if log_data:
+                                    track_generation_metrics(log_data, metrics)
                             except Empty:
                                 break
                         break
@@ -419,6 +436,11 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
         print(format_console('error', f'Ошибка: {exc}'))
         return 1
     finally:
+        if log_handle is not None:
+            try:
+                log_handle.close()
+            except OSError:
+                pass
         atexit.unregister(_cleanup_process)
         _cleanup_process()
 
@@ -426,7 +448,11 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
 def main(argv: list[str] | None = None) -> int:
     configure_stdio_utf8()
     parser = argparse.ArgumentParser(description='Запуск Ollama serve')
-    parser.add_argument('--host', default=None, help='Хост для запуска Ollama')
+    parser.add_argument(
+        '--host',
+        default=None,
+        help='Адрес прослушивания (по умолчанию 127.0.0.1; LAN: 0.0.0.0)',
+    )
     parser.add_argument('--port', default=None, help='Порт для запуска Ollama')
     args = parser.parse_args(argv)
     return start_ollama(host=args.host, port=args.port)

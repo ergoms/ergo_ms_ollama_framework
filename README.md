@@ -20,7 +20,7 @@ ergoms ollama_framework:logs-ollama
 ergoms ollama_framework:ollama --pull mistral:latest
 ```
 
-`pull-setup-models` (и setup-full) при необходимости поднимают Ollama в фоне; логи — `logs/ollama-serve.log` (`ergoms ollama_framework:logs-ollama`). По окончании `setup-full` процесс останавливается через `host_lifecycle.yaml` (`stop-ollama`).
+`pull-setup-models` (и setup-full) при необходимости поднимают Ollama в фоне. Serve (фон, `start-ollama` и служба `ergo-ollama`) пишет в один файл `logs/ollama-serve.log` (`ERGO_LOG_FILE_OLLAMA`, ротация `ergoms rotate-logs`). Хвост: `ergoms ollama_framework:logs-ollama` или `ergoms logs ergo-ollama`. По окончании `setup-full` процесс останавливается через `host_lifecycle.yaml` (`stop-ollama`).
 
 ## Переменные окружения
 
@@ -29,6 +29,7 @@ ergoms ollama_framework:ollama --pull mistral:latest
 | Ключ | Назначение |
 |------|------------|
 | `OLLAMA_BASE_URL` | URL сервера Ollama (по умолчанию `http://127.0.0.1:11434`) |
+| `OLLAMA_HOST` | Адрес прослушивания `ollama serve`. По умолчанию `127.0.0.1:11434`. Доступ не с localhost — только явно, например `0.0.0.0:11434` |
 | `OLLAMA_DEFAULT_MODEL` | Модель по умолчанию для chat/generate |
 | `OLLAMA_EMBEDDINGS_MODEL` | Модель для embeddings (pull в setup-full через `ollama_models.yaml`) |
 | `OLLAMA_FRAMEWORK_TRANSPORT` | `local` (ModuleBridge in-process) или `http` (REST API модуля) |

@@ -2,6 +2,9 @@
 module: ollama_framework
 roles:
   - id: ollama
+    reserve_host_budget: true
+    # Запас VRAM под загруженные веса; подстройте под свои модели.
+    reserve_vram_mb: 4096
     process_names:
       - ollama
       - ollama.exe

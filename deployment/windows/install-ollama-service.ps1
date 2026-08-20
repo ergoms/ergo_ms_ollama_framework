@@ -74,7 +74,19 @@ function Install-OllamaService {
     & $nssmExe set $serviceName DisplayName "Ergo MS - $serviceName"
     & $nssmExe set $serviceName Description "Ergo Management System - Ollama Server"
     & $nssmExe set $serviceName AppDirectory (Join-Path $Root 'core')
-    $singleLog = Join-Path $logsDir "${serviceName}.log"
+    $singleLog = Join-Path $logsDir 'ollama-serve.log'
+    $pythonExe = Join-Path $Root 'virtual_env\python\Scripts\python.exe'
+    $logEnvScript = Join-Path $Root 'core\deployment\scripts\log_env.py'
+    if ((Test-Path -LiteralPath $pythonExe) -and (Test-Path -LiteralPath $logEnvScript)) {
+        $resolved = & $pythonExe $logEnvScript path OLLAMA $Root 2>$null
+        if (-not [string]::IsNullOrWhiteSpace($resolved)) {
+            $singleLog = $resolved.Trim()
+        }
+    }
+    $logParent = Split-Path -Parent $singleLog
+    if ($logParent) {
+        New-Item -ItemType Directory -Path $logParent -Force | Out-Null
+    }
     & $nssmExe set $serviceName AppStdout $singleLog
     & $nssmExe set $serviceName AppStderr $singleLog
     & $nssmExe set $serviceName AppEnvironmentExtra "PYTHONIOENCODING=UTF-8" "PYTHONUTF8=1" "PYTHONUNBUFFERED=1"

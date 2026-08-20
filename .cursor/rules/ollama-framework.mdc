@@ -24,7 +24,9 @@ alwaysApply: false
 - Проверка health REST — `GET /api/ollama_framework/status/` (для UI своего модуля или ops; другие модули — через bridge или свой proxy)
 - Права ADP: `ollama_framework_view` (status/models), `ollama_framework_llm` (generate/chat/embed)
 - Ops env — `deployment/paths.read_env` читает модульный и корневой `.env` (модульный перекрывает корневой при равном ключе в файлах; `os.environ` важнее обоих)
+- `ollama serve` по умолчанию слушает `127.0.0.1` (`OLLAMA_HOST` задаёт `build_ollama_env`). Доступ с LAN — только явным `OLLAMA_HOST=0.0.0.0:11434` в `.env`; `OLLAMA_BASE_URL` с не-loopback хостом **не** открывает serve наружу
 - Документация модуля — синхронизировать `AGENTS.md` / README / это правило с контрактами (корневой `module-docs.mdc`)
+- Alias имени модели (`embeddinggemma` → `embeddinggemma:latest`) логировать один раз на экземпляр клиента (`_resolve_embed_model` / `_ensure_resolved_model`), не на каждый `embed` / generate
 
 ## Запрещено
 

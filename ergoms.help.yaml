@@ -36,3 +36,4 @@ notes:
 - Ops-команды (ollama, start/stop, status, install, pull-setup-models) не поднимают Django
 - Модели для setup-full — hook `ollama_models.yaml` в модуле-потребителе (requires ollama_framework)
 - LLM из других модулей — только через ollama_framework (см. ollama-framework.mdc)
+- Serve по умолчанию слушает 127.0.0.1; LAN — OLLAMA_HOST=0.0.0.0:11434

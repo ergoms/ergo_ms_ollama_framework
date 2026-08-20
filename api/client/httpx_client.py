@@ -54,6 +54,7 @@ class HttpxOllamaClient(BaseLLMClient):
         self._max_retries = max_retries
         self._device_config = device_config or {}
         self._model_resolved = False
+        self._resolved_embed_models: Dict[str, str] = {}
         self._models_cache: Optional[List[str]] = None
         self._models_cache_at = 0.0
 
@@ -83,6 +84,7 @@ class HttpxOllamaClient(BaseLLMClient):
         self._models_cache = None
         self._models_cache_at = 0.0
         self._model_resolved = False
+        self._resolved_embed_models.clear()
 
     def _fetch_model_names(self) -> List[str]:
         now = time.monotonic()
@@ -116,6 +118,21 @@ class HttpxOllamaClient(BaseLLMClient):
             )
             self.model = resolved
         self._model_resolved = True
+
+    def _resolve_embed_model(self, requested: str) -> str:
+        cached = self._resolved_embed_models.get(requested)
+        if cached is not None:
+            return cached
+        available = self.list_models()
+        resolved = resolve_ollama_model(requested, available) or requested
+        if resolved != requested:
+            logger.info(
+                'Embed-модель %r не найдена среди установленных, используем %r',
+                requested,
+                resolved,
+            )
+        self._resolved_embed_models[requested] = resolved
+        return resolved
 
     def check_health(self) -> Dict[str, Any]:
         try:
@@ -497,16 +514,8 @@ class HttpxOllamaClient(BaseLLMClient):
         if not texts:
             return []
 
-        # Подбираем установленное имя модели (embeddinggemma → embeddinggemma:latest).
         requested = model or self.model
-        available = self.list_models()
-        embed_model = resolve_ollama_model(requested, available) or requested
-        if embed_model != requested:
-            logger.info(
-                'Embed-модель %r не найдена среди установленных, используем %r',
-                requested,
-                embed_model,
-            )
+        embed_model = self._resolve_embed_model(requested)
 
         payload = {'model': embed_model, 'input': texts}
         last_error: Optional[Exception] = None

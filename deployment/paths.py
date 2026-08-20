@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 import platform
 import shutil
+import sys
 from pathlib import Path
 from typing import Mapping, Optional
+from urllib.parse import urlparse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -71,6 +73,80 @@ def get_ollama_base_url() -> str:
     return (read_env('OLLAMA_BASE_URL', 'http://127.0.0.1:11434') or 'http://127.0.0.1:11434').rstrip('/')
 
 
+DEFAULT_OLLAMA_HOST = '127.0.0.1'
+DEFAULT_OLLAMA_PORT = 11434
+_LOOPBACK_HOSTS = frozenset({'127.0.0.1', 'localhost', '::1'})
+
+
+def _is_loopback_host(host: str) -> bool:
+    return (host or '').strip().lower() in _LOOPBACK_HOSTS
+
+
+def _normalize_bind_host(host: str) -> str:
+    """localhost → 127.0.0.1; остальные адреса без изменения."""
+    stripped = (host or '').strip() or DEFAULT_OLLAMA_HOST
+    if stripped.lower() == 'localhost':
+        return DEFAULT_OLLAMA_HOST
+    return stripped
+
+
+def parse_ollama_host_port(value: str) -> tuple[str, int]:
+    """Разбирает OLLAMA_HOST (`host:port`) или URL в пару хост/порт."""
+    raw = (value or '').strip()
+    if not raw:
+        return DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_PORT
+    if '://' not in raw:
+        raw = f'http://{raw}'
+    parsed = urlparse(raw)
+    host = (parsed.hostname or DEFAULT_OLLAMA_HOST).strip() or DEFAULT_OLLAMA_HOST
+    port = int(parsed.port or DEFAULT_OLLAMA_PORT)
+    return host, port
+
+
+def resolve_ollama_listen_addr(
+    *,
+    override_host: Optional[str] = None,
+    override_port: Optional[str | int] = None,
+) -> tuple[str, int]:
+    """
+    Адрес прослушивания ``ollama serve``.
+
+    По умолчанию loopback. LAN (`0.0.0.0` / внешний IP) — только явным
+    ``OLLAMA_HOST`` или ``--host``. Хост из ``OLLAMA_BASE_URL`` берётся,
+    только если это loopback; иначе клиентский URL не открывает serve наружу.
+    """
+    port_override: int | None = None
+    if override_port is not None and str(override_port).strip() != '':
+        port_override = int(override_port)
+
+    if override_host and override_host.strip():
+        host = _normalize_bind_host(override_host)
+        if port_override is not None:
+            return host, port_override
+        _, fallback_port = parse_ollama_host_port(
+            read_env('OLLAMA_HOST', '') or get_ollama_base_url()
+        )
+        return host, fallback_port
+
+    explicit = read_env('OLLAMA_HOST', '')
+    if explicit:
+        host, port = parse_ollama_host_port(explicit)
+        if port_override is not None:
+            port = port_override
+        return _normalize_bind_host(host), port
+
+    base_host, base_port = parse_ollama_host_port(get_ollama_base_url())
+    if port_override is not None:
+        base_port = port_override
+    if _is_loopback_host(base_host):
+        return _normalize_bind_host(base_host), base_port
+    return DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_PORT
+
+
+def format_ollama_host(host: str, port: int) -> str:
+    return f'{host}:{port}'
+
+
 def get_default_model() -> str:
     return read_env('OLLAMA_DEFAULT_MODEL', 'mistral:latest') or 'mistral:latest'
 
@@ -104,16 +180,14 @@ OLLAMA_SERVE_LOG_NAME = 'ollama-serve.log'
 
 
 def get_ollama_serve_log_path(root: Optional[Path] = None) -> Path:
-    """Файл логов фонового ``ollama serve`` (``logs/ollama-serve.log``)."""
+    """Файл логов serve: ``logs/ollama-serve.log`` или ``ERGO_LOG_FILE_OLLAMA``."""
     project_root = root or PROJECT_ROOT
-    custom = read_env('ERGO_LOGS_DIR', '')
-    if custom:
-        logs_dir = Path(custom)
-        if not logs_dir.is_absolute():
-            logs_dir = project_root / logs_dir
-    else:
-        logs_dir = project_root / 'logs'
-    return logs_dir / OLLAMA_SERVE_LOG_NAME
+    scripts = project_root / 'core' / 'deployment' / 'scripts'
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import log_env
+
+    return log_env.log_file_path('OLLAMA', project_root)
 
 
 def purge_ollama_identity_keys(home: Optional[Path] = None) -> None:
@@ -150,6 +224,11 @@ def build_ollama_env(
     # Переопределение: OLLAMA_NO_CLOUD=0 в .env
     if not (env.get('OLLAMA_NO_CLOUD') or '').strip():
         env['OLLAMA_NO_CLOUD'] = '1'
+
+    # Явный bind: не полагаться на дефолт бинаря (исторически бывал 0.0.0.0).
+    if not (env.get('OLLAMA_HOST') or '').strip():
+        listen_host, listen_port = resolve_ollama_listen_addr()
+        env['OLLAMA_HOST'] = format_ollama_host(listen_host, listen_port)
 
     # Локальный API не через корпоративный http_proxy
     local_hosts = '127.0.0.1,localhost,::1'

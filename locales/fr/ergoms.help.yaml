@@ -36,3 +36,4 @@ notes:
 - Les commandes ops (ollama, start/stop, status, install, pull-setup-models) ne démarrent pas Django
 - Modèles setup-full — hook ollama_models.yaml chez les consommateurs (requires ollama_framework)
 - LLM depuis d'autres modules — uniquement via ollama_framework (voir ollama-framework.mdc)
+- Serve écoute 127.0.0.1 par défaut ; LAN — OLLAMA_HOST=0.0.0.0:11434
