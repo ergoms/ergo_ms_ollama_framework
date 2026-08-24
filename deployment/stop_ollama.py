@@ -24,8 +24,7 @@ from modules.ollama_framework.deployment.process import find_ollama, terminate_o
 def stop_ollama() -> int:
     process = find_ollama(include_wrapper=True)
     if not process:
-        # После systemctl stop unit уже убил процесс — это нормальный SKIP, не WARNING.
-        print(format_console('skip', 'Ollama процесс не найден'))
+        # Идемпотентный stop: процесса нет — не шумим в ergoms stop/uninstall-services.
         return 0
 
     try:
