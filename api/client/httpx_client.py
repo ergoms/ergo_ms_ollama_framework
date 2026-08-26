@@ -14,23 +14,29 @@ logger = logging.getLogger(__name__)
 _MODELS_CACHE_TTL_SECONDS = 60.0
 
 
+def _pick_family(requested: str, models: List[str]) -> str:
+    base = requested.split(':', 1)[0]
+    same_family = [item for item in models if item == base or item.startswith(f'{base}:')]
+    if not same_family:
+        return ''
+    for candidate in same_family:
+        if candidate == base or candidate.endswith(':latest'):
+            return candidate
+    return same_family[0]
+
+
 def resolve_ollama_model(requested: Optional[str], available: List[str]) -> str:
-    """Подбирает установленную модель: точное имя или то же семейство (mistral:7b → mistral:latest)."""
-    models = [m for m in available if isinstance(m, str) and m]
+    """Подбирает установленную модель: точное имя или семейство (name / name:latest)."""
+    models = [item for item in available if isinstance(item, str) and item]
     if not models:
         return requested or ''
     if not requested:
         return models[0]
     if requested in models:
         return requested
-
-    base = requested.split(':', 1)[0]
-    same_family = [m for m in models if m == base or m.startswith(f'{base}:')]
-    if same_family:
-        for candidate in same_family:
-            if candidate == base or candidate.endswith(':latest'):
-                return candidate
-        return same_family[0]
+    family = _pick_family(requested, models)
+    if family:
+        return family
     return requested
 
 

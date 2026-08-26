@@ -31,7 +31,7 @@ ergoms ollama_framework:ollama --pull mistral:latest
 | `OLLAMA_BASE_URL` | URL сервера Ollama (по умолчанию `http://127.0.0.1:11434`) |
 | `OLLAMA_HOST` | Адрес прослушивания `ollama serve`. По умолчанию `127.0.0.1:11434`. Доступ не с localhost — только явно, например `0.0.0.0:11434` |
 | `OLLAMA_DEFAULT_MODEL` | Модель по умолчанию для chat/generate |
-| `OLLAMA_EMBEDDINGS_MODEL` | Модель для embeddings (pull в setup-full через `ollama_models.yaml`) |
+| `OLLAMA_EMBEDDINGS_MODEL` | Модель embeddings из библиотеки Ollama (`ollama pull` / `/api/embed`). Снимки Hugging Face `org/name` сюда не ставят — `huggingface_models.yaml` и `ergoms pull-huggingface-models` |
 | `OLLAMA_FRAMEWORK_TRANSPORT` | `local` (ModuleBridge in-process) или `http` (REST API модуля) |
 | `OLLAMA_FRAMEWORK_API_BASE` | Базовый URL API при transport=http |
 | `OLLAMA_REQUEST_TIMEOUT` | Таймаут запроса, сек |

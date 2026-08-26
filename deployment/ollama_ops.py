@@ -15,6 +15,7 @@ from .paths import (
     get_trained_models_dir,
     resolve_ollama_command,
 )
+from .model_names import matches_installed, pull_names
 from .process import (
     find_ollama,
     is_ollama_server_available,
@@ -97,25 +98,9 @@ class OllamaOps:
             models = self._list_model_names()
         except Exception:
             return False
-        if model_name in models:
-            return True
-        base = model_name.split(':', 1)[0]
-        for installed in models:
-            if installed == model_name:
-                return True
-            if installed.startswith(f'{base}:'):
-                return True
-            if model_name in installed:
-                return True
-        return False
+        return matches_installed(model_name, models)
 
-    def pull_model(self, model_name: str) -> bool:
-        try:
-            client = self.get_ollama_client()
-        except ImportError:
-            self.stdout.write('Ollama Python client не установлен')
-            return False
-
+    def _pull_one(self, client, model_name: str) -> bool:
         self.stdout.write(f'Скачиваю модель {model_name}...')
         last_key = None
         try:
@@ -134,6 +119,23 @@ class OllamaOps:
             self.stdout.write('')
             self.stdout.write(f'Ошибка при скачивании модели: {exc}')
             return False
+
+    def pull_model(self, model_name: str) -> bool:
+        try:
+            client = self.get_ollama_client()
+        except ImportError:
+            self.stdout.write('Ollama Python client не установлен')
+            return False
+
+        candidates = pull_names(model_name)
+        for index, candidate in enumerate(candidates):
+            if index > 0:
+                self.stdout.write(
+                    f'Имени {model_name!r} нет в библиотеке Ollama, пробую {candidate!r}'
+                )
+            if self._pull_one(client, candidate):
+                return True
+        return False
 
     def remove_model(self, model_name: str) -> None:
         try:

@@ -21,6 +21,9 @@ if str(DEPLOYMENT_DIR) not in sys.path:
 from console_tags import configure_stdio_utf8, format_console  # noqa: E402
 
 from modules.ollama_framework.deployment.install_ollama import is_installed  # noqa: E402
+from modules.ollama_framework.deployment.model_names import (  # noqa: E402
+    is_ollama_library_name,
+)
 from modules.ollama_framework.deployment.ollama_models_loader import (  # noqa: E402
     load_resolved_models,
 )
@@ -47,6 +50,15 @@ def pull_setup_models(root: Path) -> int:
 
     failed_required: list[str] = []
     for model in models:
+        if not is_ollama_library_name(model.name):
+            print(
+                format_console(
+                    'skip',
+                    f'{model.name} — снимок Hugging Face, не Ollama '
+                    f'(huggingface_models.yaml / ergoms pull-huggingface-models)',
+                )
+            )
+            continue
         if ops.is_model_installed(model.name):
             print(format_console('skip', f'Модель {model.name} уже установлена'))
             continue
