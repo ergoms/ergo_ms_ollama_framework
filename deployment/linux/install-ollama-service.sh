@@ -43,6 +43,7 @@ EnvironmentFile=__ERGO_MS_ENV__
 ExecStart=/bin/bash -lc 'cd "\$ERGO_ROOT" && ergoms ollama_framework:start-ollama'
 Restart=always
 RestartSec=5
+TimeoutStopSec=30
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=$ERGO_ROOT/virtual_env/cache/ollama/home
 Environment=OLLAMA_NO_CLOUD=1
