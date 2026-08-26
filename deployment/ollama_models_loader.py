@@ -29,6 +29,10 @@ from console_tags import configure_stdio_utf8, format_console  # noqa: E402
 from env_file_loader import load_project_env, parse_env_file  # noqa: E402
 from lifecycle.modules.catalog import ModuleCatalog  # noqa: E402
 
+from modules.ollama_framework.deployment.model_names import (  # noqa: E402
+    is_ollama_library_name,
+)
+
 OLLAMA_MODELS_FILENAME = 'ollama_models.yaml'
 INTEGRATIONS_FILENAME = 'integrations.yaml'
 OLLAMA_FRAMEWORK_MODULE = 'ollama_framework'
@@ -184,6 +188,16 @@ def _parse_models_file(
         if not name:
             _warn(f'{path}: models[{index}] — пустое имя (нужны name или env+default)')
             continue
+        if not is_ollama_library_name(name):
+            fallback = str(item.get('default') or '').strip()
+            if fallback and is_ollama_library_name(fallback):
+                _warn(
+                    f'{path}: {name} — снимок Hugging Face, для Ollama берём {fallback}'
+                )
+                name = fallback
+            else:
+                _warn(f'{path}: {name} — не имя библиотеки Ollama, пропуск')
+                continue
 
         kind = str(item.get('kind') or '').strip().lower()
         required_raw = item.get('required', True)

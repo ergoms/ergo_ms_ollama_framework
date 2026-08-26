@@ -25,7 +25,7 @@
 - Модели setup-full — hook `ollama_models.yaml`; loader в `deployment/ollama_models_loader.py`, pull — `ergoms ollama_framework:pull-setup-models` (фоновый и foreground serve пишут в `logs/ollama-serve.log` через `log_env` / `ERGO_LOG_FILE_OLLAMA`, не `stderr=PIPE`); в конце `setup-full` ядро останавливает serve через `host_lifecycle.yaml` → `stop_commands`
 - Foreground `start-ollama` на Windows — Job Object `KILL_ON_JOB_CLOSE` + `CREATE_BREAKAWAY_FROM_JOB` (иначе в терминале Cursor serve переживает закрытие вкладки); фоновый `start_ollama_background` по-прежнему переживает выход родителя
 - Embed: сначала `/api/embed`, при 404/501 — fallback на legacy `/api/embeddings` (`prompt`); alias семейства (`embeddinggemma` → `:latest`) логировать один раз на клиент, не на каждый вызов
-- `pull-setup-models` качает только библиотеку Ollama. Снимки Hugging Face `org/name` — hook `huggingface_models.yaml` и `ergoms pull-huggingface-models`, не этот yaml
+- `pull-setup-models` качает только библиотеку Ollama. Снимки Hugging Face `org/name` в `OLLAMA_EMBEDDINGS_MODEL` не тянутся через `ollama pull`: loader берёт `default` из yaml (`embeddinggemma`). Веса Hub — hook `huggingface_models.yaml` и `ergoms pull-huggingface-models`
 - Serve слушает `127.0.0.1` (`OLLAMA_HOST` в `build_ollama_env`); LAN — только явным `OLLAMA_HOST=0.0.0.0:11434`
 - Документация модуля — синхронизировать с кодом (корневой `module-docs.mdc`)
 
