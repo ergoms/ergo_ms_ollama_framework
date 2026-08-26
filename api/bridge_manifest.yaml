@@ -1,0 +1,11 @@
+# Владелец ops/groups для ModuleBridge HTTP-маршрутизации (MODULE_RUNTIME=microservice).
+service: ollama_framework
+version: 1
+ops:
+  - ollama_framework.health
+  - ollama_framework.list_models
+  - ollama_framework.generate
+  - ollama_framework.chat
+  - ollama_framework.chat_stream
+  - ollama_framework.embed
+groups: []

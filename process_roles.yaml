@@ -15,3 +15,16 @@ roles:
       - cmdline_contains_any:
           - ollama
         project_bound: true
+  - id: module-api:ollama_framework
+    when:
+      - cmdline_contains_any:
+          - start_module_api.py
+          - --module=ollama_framework
+        project_bound: true
+  - id: module-worker:ollama_framework
+    when:
+      - cmdline_contains_any:
+          - start_celery_worker.py
+          - --module=ollama_framework
+        project_bound: true
+

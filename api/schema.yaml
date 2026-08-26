@@ -1,2 +1,2 @@
 schema: m_ollama_framework
-isolated: false
+isolated: true

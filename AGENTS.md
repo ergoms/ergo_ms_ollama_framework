@@ -19,6 +19,7 @@
 ## Обязательно
 
 - Вызовы LLM из других модулей — `bridge.call('ollama_framework.<op>', …)`
+- Вынос API/worker модуля: `api/bridge_manifest.yaml`, `api/schema.yaml` (`isolated: true`); в `host_lifecycle.yaml` / `process_roles.yaml` рядом с демоном `ergo-ollama` есть `install-module-service` для api и worker
 - Внутри модуля — `create_client` / runtime / transport
 - Транспорт потребителя — `OLLAMA_FRAMEWORK_TRANSPORT=local|http`
 - REST: status/models — право `ollama_framework_view`; generate/chat/embed — `ollama_framework_llm`
