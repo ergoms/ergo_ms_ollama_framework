@@ -25,6 +25,16 @@ def _pick_family(requested: str, models: List[str]) -> str:
     return same_family[0]
 
 
+def _assistant_text(message: Any) -> str:
+    """Текст ответа: content, иначе thinking (gpt-oss при format=json часто пустой content)."""
+    if not isinstance(message, dict):
+        return ''
+    content = str(message.get('content') or '').strip()
+    if content:
+        return content
+    return str(message.get('thinking') or '').strip()
+
+
 def resolve_ollama_model(requested: Optional[str], available: List[str]) -> str:
     """Подбирает установленную модель: точное имя или семейство (name / name:latest)."""
     models = [item for item in available if isinstance(item, str) and item]
@@ -219,7 +229,9 @@ class HttpxOllamaClient(BaseLLMClient):
             system=system,
         )
         if format is not None:
-            payload['format'] = format
+            payload['format'] = (
+                {'type': 'object'} if format == 'json' else format
+            )
         self._ensure_resolved_model()
         payload['model'] = self.model
 
@@ -334,7 +346,10 @@ class HttpxOllamaClient(BaseLLMClient):
             'options': {'top_k': 40, 'top_p': 0.9},
         }
         if format is not None:
-            payload['format'] = format
+            # Строка format=json у gpt-oss даёт оборванный не-JSON; схема — нормальный объект.
+            payload['format'] = (
+                {'type': 'object'} if format == 'json' else format
+            )
         if num_predict is not None:
             payload['options']['num_predict'] = num_predict
         if temperature is not None:
@@ -342,7 +357,10 @@ class HttpxOllamaClient(BaseLLMClient):
         if seed is not None:
             payload['options']['seed'] = seed
         if self._device_config:
-            payload['options'].update(self._device_config)
+            extra = dict(self._device_config)
+            if 'think' in extra:
+                payload['think'] = extra.pop('think')
+            payload['options'].update(extra)
 
         self._ensure_resolved_model()
         payload['model'] = self.model
@@ -368,7 +386,7 @@ class HttpxOllamaClient(BaseLLMClient):
             response = self._client.post('/api/chat', json=payload)
             response.raise_for_status()
             data = response.json()
-            content = data.get('message', {}).get('content', '')
+            content = _assistant_text(data.get('message') or {})
             if return_stats:
                 return content, {
                     'prompt_eval_count': data.get('prompt_eval_count'),
@@ -397,7 +415,7 @@ class HttpxOllamaClient(BaseLLMClient):
                     except json.JSONDecodeError:
                         continue
                     message = data.get('message', {})
-                    text = message.get('content') if isinstance(message, dict) else None
+                    text = _assistant_text(message) if isinstance(message, dict) else ''
                     if text:
                         chunks.append(text)
                         if stream_callback:
