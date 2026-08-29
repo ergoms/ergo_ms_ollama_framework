@@ -25,14 +25,26 @@ def _pick_family(requested: str, models: List[str]) -> str:
     return same_family[0]
 
 
+def _looks_like_json_object(text: str) -> bool:
+    stripped = (text or '').strip()
+    if stripped.startswith('```'):
+        stripped = stripped.split('\n', 1)[-1].lstrip()
+    return stripped.startswith('{') or stripped.startswith('[')
+
+
 def _assistant_text(message: Any) -> str:
     """Текст ответа: content, иначе thinking (gpt-oss при format=json часто пустой content)."""
     if not isinstance(message, dict):
         return ''
     content = str(message.get('content') or '').strip()
+    thinking = str(message.get('thinking') or '').strip()
+    if content and _looks_like_json_object(content):
+        return content
+    if thinking and _looks_like_json_object(thinking):
+        return thinking
     if content:
         return content
-    return str(message.get('thinking') or '').strip()
+    return thinking
 
 
 def resolve_ollama_model(requested: Optional[str], available: List[str]) -> str:
@@ -361,6 +373,12 @@ class HttpxOllamaClient(BaseLLMClient):
             if 'think' in extra:
                 payload['think'] = extra.pop('think')
             payload['options'].update(extra)
+        # gpt-oss игнорирует bool think; без уровня low рассуждение съедает num_predict,
+        # и в content не остаётся JSON. false + схема даёт прозу вместо объекта.
+        if format is not None:
+            current = payload.get('think')
+            if current in (None, True, False, 'true', 'false'):
+                payload['think'] = 'low'
 
         self._ensure_resolved_model()
         payload['model'] = self.model

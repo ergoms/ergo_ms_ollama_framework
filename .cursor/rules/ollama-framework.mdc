@@ -27,7 +27,7 @@ alwaysApply: false
 - `ollama serve` по умолчанию слушает `127.0.0.1` (`OLLAMA_HOST` задаёт `build_ollama_env`). Доступ с LAN — только явным `OLLAMA_HOST=0.0.0.0:11434` в `.env`; `OLLAMA_BASE_URL` с не-loopback хостом **не** открывает serve наружу
 - Документация модуля — синхронизировать `AGENTS.md` / README / это правило с контрактами (корневой `module-docs.mdc`)
 - Имя модели Ollama (`embeddinggemma` → `embeddinggemma:latest`) — `deployment/model_names.py`; логировать один раз на экземпляр клиента, не на каждый `embed` / generate
-- Chat: в ответ идёт `message.content`, если пусто — `thinking`. Строка `format=json` у gpt-oss даёт оборванный текст — клиент подменяет её схемой `{"type":"object"}`
+- Chat: в ответ идёт `message.content`, если пусто или не JSON — `thinking`. Строка `format=json` у gpt-oss даёт оборванный текст — клиент подменяет её схемой `{"type":"object"}` и ставит `think=low`: у gpt-oss bool `think` игнорируется, а длинное рассуждение съедает `num_predict` и оставляет прозу вместо JSON
 - Hugging Face `org/name` в `OLLAMA_EMBEDDINGS_MODEL` — не `ollama pull`; loader берёт `default` из yaml (`embeddinggemma`). Снимки объявляют в `huggingface_models.yaml` (корневой `huggingface-models.mdc`)
 
 ## Запрещено
