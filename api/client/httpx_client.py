@@ -96,12 +96,13 @@ class HttpxOllamaClient(BaseLLMClient):
             write=request_timeout,
             read=max(stream_timeout, request_timeout * 2),
         )
-        # trust_env=False: http_proxy не должен перехватывать localhost:11434
+        from src.core.utils.http_proxy import http_trust_env
+
         self._client = httpx.Client(
             base_url=self._base_url,
             timeout=timeout,
             limits=limits,
-            trust_env=False,
+            trust_env=http_trust_env(),
         )
         self._keep_alive = keep_alive
 

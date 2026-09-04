@@ -16,6 +16,7 @@ import psutil
 
 from .paths import (
     build_ollama_env,
+    ergo_http_trust_env,
     get_ollama_base_url,
     get_ollama_dir,
     get_ollama_serve_log_path,
@@ -70,7 +71,7 @@ def is_ollama_server_available(timeout: float = 2.0) -> bool:
         response = httpx.get(
             f'{get_ollama_base_url()}/api/tags',
             timeout=timeout,
-            trust_env=False,
+            trust_env=ergo_http_trust_env(),
         )
         return response.status_code == 200
     except Exception:

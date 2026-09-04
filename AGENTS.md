@@ -19,6 +19,7 @@
 ## Обязательно
 
 - Вызовы LLM из других модулей — `bridge.call('ollama_framework.<op>', …)`
+- HTTP к Ollama уважает `ERGO_HTTP_TRUST_ENV` / `NO_PROXY` из `env/modules.env` (по умолчанию без HTTP_PROXY)
 - Вынос API/worker модуля: `api/bridge_manifest.yaml`, `api/schema.yaml` (`isolated: true`); в `host_lifecycle.yaml` / `process_roles.yaml` рядом с демоном `ergo-ollama` есть `install-module-service` для api и worker
 - Внутри модуля — `create_client` / runtime / transport
 - Транспорт потребителя — `OLLAMA_FRAMEWORK_TRANSPORT=local|http`

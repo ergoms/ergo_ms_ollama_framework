@@ -13,6 +13,17 @@ from urllib.parse import urlparse
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
+def ergo_http_trust_env(environ: Mapping[str, str] | None = None) -> bool:
+    """ERGO_HTTP_TRUST_ENV из окружения (внутренний HTTP через прокси или нет)."""
+    env = environ if environ is not None else os.environ
+    return (env.get('ERGO_HTTP_TRUST_ENV') or '').strip().lower() in (
+        '1',
+        'true',
+        'yes',
+        'on',
+    )
+
+
 def _read_env_file_value(env_path: Path, name: str) -> Optional[str]:
     if not env_path.is_file():
         return None

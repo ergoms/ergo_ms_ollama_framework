@@ -11,6 +11,7 @@ from typing import Any, Optional, TextIO
 import httpx
 
 from .paths import (
+    ergo_http_trust_env,
     get_ollama_base_url,
     get_trained_models_dir,
     resolve_ollama_command,
@@ -235,7 +236,7 @@ class OllamaOps:
                 f'{get_ollama_base_url()}/api/chat',
                 json=payload,
                 timeout=180.0,
-                trust_env=False,
+                trust_env=ergo_http_trust_env(),
             )
             response.raise_for_status()
             data = response.json()
@@ -280,7 +281,7 @@ class OllamaOps:
         response = httpx.get(
             f'{get_ollama_base_url()}/api/tags',
             timeout=10.0,
-            trust_env=False,
+            trust_env=ergo_http_trust_env(),
         )
         response.raise_for_status()
         models = response.json().get('models') or []
