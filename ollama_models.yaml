@@ -9,5 +9,5 @@ models:
     required: true
   - env: OLLAMA_DEFAULT_MODEL
     kind: llm
-    default: mistral:latest
+    default: ministral-3:8b
     required: false

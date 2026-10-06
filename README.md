@@ -17,7 +17,7 @@ ergoms ollama_framework:pull-setup-models
 ergoms ollama_framework:start-ollama
 ergoms ollama_framework:ollama-status
 ergoms ollama_framework:logs-ollama
-ergoms ollama_framework:ollama --pull mistral:latest
+ergoms ollama_framework:ollama --pull ministral-3:8b
 ```
 
 `pull-setup-models` (и setup-full) при необходимости поднимают Ollama в фоне. Serve (фон, `start-ollama` и служба `ergo-ollama`) пишет в один файл `logs/ollama-serve.log` (`ERGO_LOG_FILE_OLLAMA`, ротация `ergoms rotate-logs`). Хвост: `ergoms ollama_framework:logs-ollama` или `ergoms logs ergo-ollama`. По окончании `setup-full` процесс останавливается через `host_lifecycle.yaml` (`stop-ollama`).

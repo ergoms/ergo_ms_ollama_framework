@@ -30,6 +30,7 @@
 - Chat с `format`: клиент ставит `think=low`. У gpt-oss bool `think` игнорируется; длинное рассуждение съедает `num_predict`, и вместо JSON приходит проза
 - `pull-setup-models` качает только библиотеку Ollama. Снимки Hugging Face `org/name` в `OLLAMA_EMBEDDINGS_MODEL` не тянутся через `ollama pull`: loader берёт `default` из yaml (`embeddinggemma`). Веса Hub — hook `huggingface_models.yaml` и `ergoms pull-huggingface-models`
 - Serve слушает `127.0.0.1` (`OLLAMA_HOST` в `build_ollama_env`); LAN — только явным `OLLAMA_HOST=0.0.0.0:11434`
+- `OLLAMA_NO_CLOUD=1` остаётся. Файл `id_ed25519` в `virtual_env/cache/ollama/home/.ollama/` при старте не удалять: `ollama pull` открывает его, даже когда облако выключено
 - Документация модуля — синхронизировать с кодом (корневой `module-docs.mdc`)
 
 ## Команды

@@ -133,7 +133,7 @@ def create_client(
 
     client = build_llm_client(
         provider=provider_name,
-        model=runtime_config.model or 'mistral:latest',
+        model=runtime_config.model or 'ministral-3:8b',
         base_url=base_url,
         request_timeout=runtime_config.request_timeout,
         stream_timeout=runtime_config.stream_timeout,

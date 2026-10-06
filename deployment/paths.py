@@ -159,7 +159,7 @@ def format_ollama_host(host: str, port: int) -> str:
 
 
 def get_default_model() -> str:
-    return read_env('OLLAMA_DEFAULT_MODEL', 'mistral:latest') or 'mistral:latest'
+    return read_env('OLLAMA_DEFAULT_MODEL', 'ministral-3:8b') or 'ministral-3:8b'
 
 
 def get_ollama_executable(root: Optional[Path] = None) -> Optional[Path]:
@@ -199,19 +199,6 @@ def get_ollama_serve_log_path(root: Optional[Path] = None) -> Path:
     import log_env
 
     return log_env.log_file_path('OLLAMA', project_root)
-
-
-def purge_ollama_identity_keys(home: Optional[Path] = None) -> None:
-    """Удаляет id_ed25519*, которые ollama создаёт при старте (для cloud; локально не нужны)."""
-    base = Path(home) if home is not None else get_ollama_runtime_home()
-    ollama_dir = base / '.ollama'
-    for name in ('id_ed25519', 'id_ed25519.pub'):
-        path = ollama_dir / name
-        try:
-            if path.is_file():
-                path.unlink()
-        except OSError:
-            pass
 
 
 def build_ollama_env(

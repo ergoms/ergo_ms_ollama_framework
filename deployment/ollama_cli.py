@@ -29,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
         description='Менеджер моделей Ollama (без Django)',
     )
     parser.add_argument('--list', action='store_true', help='Показать список установленных моделей')
-    parser.add_argument('--pull', type=str, help='Скачать модель (например: mistral:latest)')
+    parser.add_argument('--pull', type=str, help='Скачать модель (например: ministral-3:8b)')
     parser.add_argument('--remove', type=str, help='Удалить модель')
     parser.add_argument('--test', type=str, help='Протестировать модель')
     parser.add_argument('--info', action='store_true', help='Информация о системе Ollama')

@@ -114,7 +114,7 @@ async def list_tools() -> list[Tool]:
                 'type': 'object',
                 'properties': {
                     'prompt': {'type': 'string', 'description': 'Текст запроса к модели'},
-                    'model': {'type': 'string', 'description': 'Название модели Ollama', 'default': 'mistral'},
+                    'model': {'type': 'string', 'description': 'Название модели Ollama', 'default': 'ministral-3:8b'},
                     'temperature': {'type': 'number', 'description': 'Температура (0.0–1.0)', 'default': 0.7},
                     'max_tokens': {'type': 'integer', 'description': 'Макс. токенов в ответе', 'default': 2048},
                 },
@@ -137,7 +137,7 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 'type': 'object',
                 'properties': {
-                    'model': {'type': 'string', 'description': 'Название модели (mistral, llama2, …)'},
+                    'model': {'type': 'string', 'description': 'Название модели (ministral-3:8b, …)'},
                 },
                 'required': ['model'],
             },

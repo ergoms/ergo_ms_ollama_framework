@@ -32,9 +32,7 @@ from modules.ollama_framework.deployment.paths import (  # noqa: E402
     build_ollama_env,
     format_ollama_host,
     get_ollama_dir,
-    get_ollama_runtime_home,
     get_ollama_serve_log_path,
-    purge_ollama_identity_keys,
     resolve_ollama_command,
     resolve_ollama_listen_addr,
 )
@@ -383,8 +381,6 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
             output_thread.start()
 
             metrics: Dict[str, Any] = {'total_tokens': 0, 'total_duration': 0}
-            identity_purged = False
-            runtime_home = get_ollama_runtime_home()
 
             while True:
                 try:
@@ -394,13 +390,7 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
                     log_data = _emit_serve_line(line, log_handle)
                     if log_data:
                         track_generation_metrics(log_data, metrics)
-                        if not identity_purged and 'Listening on' in (log_data.get('message') or ''):
-                            purge_ollama_identity_keys(runtime_home)
-                            identity_purged = True
                 except Empty:
-                    if not identity_purged and is_ollama_server_available():
-                        purge_ollama_identity_keys(runtime_home)
-                        identity_purged = True
                     if process.poll() is not None:
                         while True:
                             try:

@@ -19,7 +19,7 @@ def _normalize_compute_device(value: str, *, default: str = 'auto') -> str:
 
 
 OLLAMA_BASE_URL = env.str('OLLAMA_BASE_URL', default='http://127.0.0.1:11434')
-OLLAMA_DEFAULT_MODEL = env.str('OLLAMA_DEFAULT_MODEL', default='mistral:latest')
+OLLAMA_DEFAULT_MODEL = env.str('OLLAMA_DEFAULT_MODEL', default='ministral-3:8b')
 _raw_embeddings_model = env.str(
     'OLLAMA_EMBEDDINGS_MODEL',
     default=_OLLAMA_EMBEDDINGS_DEFAULT,
