@@ -4,6 +4,7 @@
 
 ## Куда смотреть
 
+- Как должен работать модуль — `BEHAVIOR.md`
 - Правила Cursor модуля — `.cursor/rules/ollama-framework.mdc`
 - README и `ergoms.help.yaml`
 - Мост — `api/integrations.py`

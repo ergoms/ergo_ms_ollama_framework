@@ -366,7 +366,9 @@ def start_ollama(host: Optional[str] = None, port: Optional[str] = None) -> int:
             cwd=str(working_dir),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            universal_newlines=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
             bufsize=1,
             env=build_ollama_env(
                 {'OLLAMA_HOST': format_ollama_host(listen_host, listen_port)},
