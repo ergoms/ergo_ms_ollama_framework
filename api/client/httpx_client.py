@@ -94,7 +94,8 @@ class HttpxOllamaClient(BaseLLMClient):
             timeout=request_timeout,
             connect=min(10.0, request_timeout),
             write=request_timeout,
-            read=max(stream_timeout, request_timeout * 2),
+            # 4096 токенов при ~11 ток/с не укладываются в 360 с: ответ обрывался и слот оставался занят.
+            read=max(stream_timeout, request_timeout * 2, 900.0),
         )
         from src.core.utils.http_proxy import http_trust_env
 
