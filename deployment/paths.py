@@ -41,6 +41,15 @@ def _read_env_file_value(env_path: Path, name: str) -> Optional[str]:
     return None
 
 
+def module_env_value(name: str) -> str:
+    """Значение из modules/ollama_framework/.env, без общего слияния модулей."""
+    value = _read_env_file_value(
+        PROJECT_ROOT / 'modules' / 'ollama_framework' / '.env',
+        name,
+    )
+    return (value or '').strip()
+
+
 def read_env(name: str, default: str = '') -> str:
     """Читает переменную: os.environ → modules/ollama_framework/.env → корневой .env."""
     value = os.environ.get(name)

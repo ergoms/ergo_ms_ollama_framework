@@ -18,7 +18,24 @@ def _normalize_compute_device(value: str, *, default: str = 'auto') -> str:
     return default
 
 
-OLLAMA_BASE_URL = env.str('OLLAMA_BASE_URL', default='http://127.0.0.1:11434')
+def _configured_base_url() -> str:
+    """Адрес serve из .env этого модуля.
+
+    Общее слияние modules/**/.env оставляет последний файл. Чужой модуль
+    переписывает адрес на 127.0.0.1, хотя serve слушает свой OLLAMA_BASE_URL.
+    """
+    from ..deployment.paths import module_env_value
+
+    raw = module_env_value('OLLAMA_BASE_URL')
+    if not raw:
+        raw = env.str('OLLAMA_BASE_URL', default='http://127.0.0.1:11434')
+    raw = (raw or '').strip()
+    if raw and '://' not in raw:
+        raw = f'http://{raw}'
+    return raw.rstrip('/') or 'http://127.0.0.1:11434'
+
+
+OLLAMA_BASE_URL = _configured_base_url()
 OLLAMA_DEFAULT_MODEL = env.str('OLLAMA_DEFAULT_MODEL', default='ministral-3:8b')
 _raw_embeddings_model = env.str(
     'OLLAMA_EMBEDDINGS_MODEL',

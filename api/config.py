@@ -150,10 +150,18 @@ def build_runtime_config(
     explicit_compute = 'compute_device' in override_values or 'num_gpu' in override_values
 
     if skip_env_injection:
+        # Модель профиля не затираем OLLAMA_DEFAULT_MODEL, но адрес serve
+        # и устройство берём из настроек: иначе вызов уходит на 127.0.0.1.
         base_config = RuntimeLLMConfig(**_FALLBACK_CONFIG)
         config = base_config.copy_with_overrides(override_values)
+        if 'base_url' not in override_values:
+            config.base_url = of_settings.OLLAMA_BASE_URL
         if config.base_url and not config.provider_config.get('base_url'):
             config.provider_config['base_url'] = config.base_url
+        if 'compute_device' not in override_values and 'num_gpu' not in override_values:
+            parsed = parse_compute_device(of_settings.OLLAMA_COMPUTE_DEVICE)
+            if parsed is not None:
+                config.compute_device = parsed
         _sync_num_gpu(config)
     else:
         base_config = RuntimeLLMConfig()
