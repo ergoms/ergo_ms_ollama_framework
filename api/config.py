@@ -107,9 +107,10 @@ def _inject_env_defaults(
         config.provider = LLMProvider.OLLAMA
 
     if config.provider in (LLMProvider.AUTO, LLMProvider.OLLAMA):
-        env_base_url = env.str('OLLAMA_BASE_URL', default='') or env.str('OLLAMA_API_BASE', default='')
-        if env_base_url:
-            config.base_url = env_base_url
+        # Адрес serve берём из .env ollama_framework, не из слияния modules/**/.env:
+        # чужой файл оставляет 127.0.0.1, хотя serve слушает адрес этого модуля.
+        if of_settings.OLLAMA_BASE_URL:
+            config.base_url = of_settings.OLLAMA_BASE_URL
 
         env_model = env.str('OLLAMA_DEFAULT_MODEL', default='')
         if env_model:
