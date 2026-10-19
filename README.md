@@ -31,7 +31,7 @@ ergoms ollama_framework:ollama --pull ministral-3:8b
 | `OLLAMA_BASE_URL` | URL сервера Ollama (по умолчанию `http://127.0.0.1:11434`) |
 | `OLLAMA_HOST` | Адрес прослушивания `ollama serve`. По умолчанию `127.0.0.1:11434`. Доступ не с localhost — только явно, например `0.0.0.0:11434` |
 | `OLLAMA_DEFAULT_MODEL` | Модель по умолчанию для chat/generate |
-| `OLLAMA_EMBEDDINGS_MODEL` | Модель embeddings из библиотеки Ollama (`ollama pull` / `/api/embed`). Снимки Hugging Face `org/name` сюда не ставят — `huggingface_models.yaml` и `ergoms pull-huggingface-models` |
+| `OLLAMA_EMBEDDINGS_MODEL` | Имя библиотеки Ollama (`ollama pull` / `/api/embed`) или снимок Hugging Face `org/name`. Снимок (`deepvk/USER-bge-m3`) считается sentence-transformers, без подмены на `embeddinggemma`. Веса — `huggingface_models.yaml` и `ergoms pull-huggingface-models` |
 | `OLLAMA_FRAMEWORK_TRANSPORT` | `local` (ModuleBridge in-process) или `http` (REST API модуля) |
 | `OLLAMA_FRAMEWORK_API_BASE` | Базовый URL API при transport=http |
 | `OLLAMA_REQUEST_TIMEOUT` | Таймаут запроса, сек |
@@ -51,4 +51,4 @@ ergoms ollama_framework:ollama --pull ministral-3:8b
 
 Вызовы из других модулей — только через `bridge.call('ollama_framework.<op>', …)`, не через прямой import и не напрямую к `:11434`.
 
-Embeddings идут через `/api/embed`; если сервер отвечает `404`/`501` (старый Ollama или кратковременный отказ), клиент автоматически вызывает legacy `/api/embeddings`.
+Имя библиотеки Ollama идёт через `/api/embed`; если сервер отвечает `404`/`501` (старый Ollama или кратковременный отказ), клиент вызывает legacy `/api/embeddings`. Снимок `org/name` в `OLLAMA_EMBEDDINGS_MODEL` в Ollama не отправляется: векторы считает sentence-transformers.

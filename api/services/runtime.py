@@ -5,8 +5,12 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
+from src.core.utils.huggingface_snapshot import is_huggingface_repo_id
+
 from ..client.factory import create_client
+from ..huggingface_embeddings import embed_snapshot
 from ..ollama_process import find_ollama
+from ..settings import OLLAMA_EMBEDDINGS_MODEL
 
 
 def _resolve_client(config: Optional[Dict[str, Any]] = None, skip_env_injection: bool = False):
@@ -110,5 +114,8 @@ def run_embed(
     skip_env_injection: bool = False,
     model: Optional[str] = None,
 ) -> List[List[float]]:
+    chosen = (model or '').strip() or (OLLAMA_EMBEDDINGS_MODEL or '').strip()
+    if is_huggingface_repo_id(chosen):
+        return embed_snapshot(texts, model_name=chosen)
     _, client = _resolve_client(config, skip_env_injection=skip_env_injection)
-    return client.embed(texts, model=model)
+    return client.embed(texts, model=chosen or None)

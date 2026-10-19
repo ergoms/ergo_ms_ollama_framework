@@ -189,15 +189,15 @@ def _parse_models_file(
             _warn(f'{path}: models[{index}] — пустое имя (нужны name или env+default)')
             continue
         if not is_ollama_library_name(name):
-            fallback = str(item.get('default') or '').strip()
-            if fallback and is_ollama_library_name(fallback):
-                _warn(
-                    f'{path}: {name} — снимок Hugging Face, для Ollama берём {fallback}'
-                )
-                name = fallback
-            else:
-                _warn(f'{path}: {name} — не имя библиотеки Ollama, пропуск')
-                continue
+            print(
+                format_console(
+                    'info',
+                    f'{path}: {name} — снимок Hugging Face, ollama pull его не качает. '
+                    f'Эмбеддинги считает sentence-transformers',
+                ),
+                file=sys.stderr,
+            )
+            continue
 
         kind = str(item.get('kind') or '').strip().lower()
         required_raw = item.get('required', True)

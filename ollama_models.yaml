@@ -1,5 +1,7 @@
 # Модели Ollama для setup-full (ergoms ollama_framework:pull-setup-models).
 # Потребители ollama_framework добавляют свой ollama_models.yaml — не vscode.tasks.yaml.
+# Если OLLAMA_EMBEDDINGS_MODEL=org/name (deepvk/USER-bge-m3), эта строка не качается:
+# снимок считает sentence-transformers, default ниже — только когда переменная пуста.
 
 module: ollama_framework
 models:

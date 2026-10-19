@@ -29,7 +29,7 @@
 - Foreground `start-ollama` на Windows — Job Object `KILL_ON_JOB_CLOSE` + `CREATE_BREAKAWAY_FROM_JOB` (иначе в терминале Cursor serve переживает закрытие вкладки); фоновый `start_ollama_background` по-прежнему переживает выход родителя
 - Embed: сначала `/api/embed`, при 404/501 — fallback на legacy `/api/embeddings` (`prompt`); alias семейства (`embeddinggemma` → `:latest`) логировать один раз на клиент, не на каждый вызов
 - Chat с `format`: клиент ставит `think=low`. У gpt-oss bool `think` игнорируется; длинное рассуждение съедает `num_predict`, и вместо JSON приходит проза
-- `pull-setup-models` качает только библиотеку Ollama. Снимки Hugging Face `org/name` в `OLLAMA_EMBEDDINGS_MODEL` не тянутся через `ollama pull`: loader берёт `default` из yaml (`embeddinggemma`). Веса Hub — hook `huggingface_models.yaml` и `ergoms pull-huggingface-models`
+- `pull-setup-models` качает только библиотеку Ollama. Снимок `org/name` в `OLLAMA_EMBEDDINGS_MODEL` (сейчас `deepvk/USER-bge-m3`) не подменяется на `embeddinggemma` и не идёт в `ollama pull`: `embed` считает его через sentence-transformers. Веса — `huggingface_models.yaml` и `ergoms pull-huggingface-models`. `default: embeddinggemma` в yaml — только если переменная пуста
 - Serve слушает `127.0.0.1` (`OLLAMA_HOST` в `build_ollama_env`); LAN — только явным `OLLAMA_HOST=0.0.0.0:11434`
 - `OLLAMA_NO_CLOUD=1` остаётся. Файл `id_ed25519` в `virtual_env/cache/ollama/home/.ollama/` при старте не удалять: `ollama pull` открывает его, даже когда облако выключено
 - Документация модуля — синхронизировать с кодом (корневой `module-docs.mdc`)
