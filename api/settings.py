@@ -1,6 +1,8 @@
 """
 Настройки модуля ollama_framework — единый источник для Ollama и транспорта.
 """
+import os
+
 from src.config.env import env
 
 _OLLAMA_EMBEDDINGS_DEFAULT = 'embeddinggemma'
@@ -21,7 +23,11 @@ def _configured_base_url() -> str:
     """
     from ..deployment.paths import module_env_value
 
-    raw = module_env_value('OLLAMA_BASE_URL')
+    # Файл модуля важнее слияния modules/**/.env. Отдельная переменная процесса
+    # не затирается этим слиянием и нужна разовому прогону на другой serve.
+    raw = (os.environ.get('OLLAMA_BASE_URL_OVERRIDE') or '').strip()
+    if not raw:
+        raw = module_env_value('OLLAMA_BASE_URL')
     if not raw:
         raw = env.str('OLLAMA_BASE_URL', default='http://127.0.0.1:11434')
     raw = (raw or '').strip()

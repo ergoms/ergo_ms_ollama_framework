@@ -403,18 +403,35 @@ class HttpxOllamaClient(BaseLLMClient):
 
     def _complete_chat(self, payload: Dict[str, Any], return_stats: bool = False) -> str | tuple[str, Dict[str, Any]]:
         try:
-            response = self._client.post('/api/chat', json=payload)
-            response.raise_for_status()
-            data = response.json()
-            content = _assistant_text(data.get('message') or {})
-            if return_stats:
-                return content, {
-                    'prompt_eval_count': data.get('prompt_eval_count'),
-                    'eval_count': data.get('eval_count'),
-                }
-            return content
+            data = self._post_chat(payload)
         except httpx.HTTPStatusError as exc:
             raise self._http_error('chat', exc) from exc
+        content = _assistant_text(data.get('message') or {})
+        if return_stats:
+            return content, {
+                'prompt_eval_count': data.get('prompt_eval_count'),
+                'eval_count': data.get('eval_count'),
+            }
+        return content
+
+    def _post_chat(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Один chat. Модель без thinking получает тот же запрос ещё раз, уже без think."""
+        response = self._client.post('/api/chat', json=payload)
+        if (
+            response.status_code == 400
+            and 'think' in payload
+            and 'does not support thinking' in self._response_body_text(response)
+        ):
+            logger.info(
+                'Модель %s не принимает think, повтор без него',
+                payload.get('model'),
+            )
+            retry = dict(payload)
+            retry.pop('think', None)
+            response = self._client.post('/api/chat', json=retry)
+        response.raise_for_status()
+        data = response.json()
+        return data if isinstance(data, dict) else {}
 
     def _stream_chat(
         self,
