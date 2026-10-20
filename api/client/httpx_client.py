@@ -429,6 +429,17 @@ class HttpxOllamaClient(BaseLLMClient):
             retry = dict(payload)
             retry.pop('think', None)
             response = self._client.post('/api/chat', json=retry)
+        if response.status_code == 404 and 'not found' in self._response_body_text(response):
+            from ..settings import OLLAMA_FILE_BASE_URL
+
+            alt = (OLLAMA_FILE_BASE_URL or '').rstrip('/')
+            if alt and alt != self._base_url:
+                logger.info(
+                    'Модели %s нет на %s, повтор на адресе из файла модуля',
+                    payload.get('model'),
+                    self._base_url,
+                )
+                response = self._client.post(f'{alt}/api/chat', json=payload)
         response.raise_for_status()
         data = response.json()
         return data if isinstance(data, dict) else {}

@@ -15,27 +15,37 @@ def _normalize_compute_device(value: str, *, default: str = 'auto') -> str:
     return default
 
 
+def _normalize_base_url(raw: str) -> str:
+    text = (raw or '').strip()
+    if text and '://' not in text:
+        text = f'http://{text}'
+    return text.rstrip('/')
+
+
+def _file_base_url() -> str:
+    """Адрес из .env модуля, без переменной разового прогона."""
+    from ..deployment.paths import module_env_value
+
+    raw = module_env_value('OLLAMA_BASE_URL')
+    if not raw:
+        raw = env.str('OLLAMA_BASE_URL', default='http://127.0.0.1:11434')
+    return _normalize_base_url(raw) or 'http://127.0.0.1:11434'
+
+
 def _configured_base_url() -> str:
     """Адрес serve из .env этого модуля.
 
     Общее слияние modules/**/.env оставляет последний файл. Чужой модуль
     переписывает адрес на 127.0.0.1, хотя serve слушает свой OLLAMA_BASE_URL.
+    Переменная процесса не затирается этим слиянием.
     """
-    from ..deployment.paths import module_env_value
-
-    # Файл модуля важнее слияния modules/**/.env. Отдельная переменная процесса
-    # не затирается этим слиянием и нужна разовому прогону на другой serve.
     raw = (os.environ.get('OLLAMA_BASE_URL_OVERRIDE') or '').strip()
     if not raw:
-        raw = module_env_value('OLLAMA_BASE_URL')
-    if not raw:
-        raw = env.str('OLLAMA_BASE_URL', default='http://127.0.0.1:11434')
-    raw = (raw or '').strip()
-    if raw and '://' not in raw:
-        raw = f'http://{raw}'
-    return raw.rstrip('/') or 'http://127.0.0.1:11434'
+        return _file_base_url()
+    return _normalize_base_url(raw) or 'http://127.0.0.1:11434'
 
 
+OLLAMA_FILE_BASE_URL = _file_base_url()
 OLLAMA_BASE_URL = _configured_base_url()
 OLLAMA_DEFAULT_MODEL = env.str('OLLAMA_DEFAULT_MODEL', default='ministral-3:8b')
 # Имя библиотеки Ollama или снимок Hugging Face org/name.

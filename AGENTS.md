@@ -9,7 +9,7 @@
 - README и `ergoms.help.yaml`
 - Мост — `api/integrations.py`
 - Ops — `deployment/`, команды `ergoms ollama_framework:…`
-- Env ops — `deployment/paths.py` (`read_env`: process → module `.env` → корневой `.env`). Адрес serve в Django берётся из `modules/ollama_framework/.env`, потому что слияние чужих `.env` затирает `OLLAMA_BASE_URL`. Разовый другой serve — `OLLAMA_BASE_URL_OVERRIDE`
+- Env ops — `deployment/paths.py` (`read_env`: process → module `.env` → корневой `.env`). Адрес serve в Django берётся из `modules/ollama_framework/.env`, потому что слияние чужих `.env` затирает `OLLAMA_BASE_URL`. Разовый другой serve — `OLLAMA_BASE_URL_OVERRIDE`. Если модели там нет, chat повторяется на адресе из файла модуля
 
 ## Запрещено
 
