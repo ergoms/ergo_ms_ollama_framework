@@ -5,10 +5,4 @@
 module: ollama_framework
 packages:
   ollama:
-    kind: custom
-    dest: ollama
-    installer: deployment/install_ollama.py
-    marker_windows: ollama.exe
-    marker_linux: ollama
-    extra_dirs:
-      - ollama_models
+    use: ollama
