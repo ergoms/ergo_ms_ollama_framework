@@ -80,3 +80,6 @@ bridge.call(
 | Роли процессов | корневой `process-roles.mdc` |
 | Host lifecycle (тесты) | корневой `host-lifecycle.mdc` |
 | Потребитель | gateway в `modules/<consumer>/api/` — только `bridge.call`, без `from modules.ollama_framework…` |
+
+
+JSON chat: замена bool `think` на `low` нужна только семейству `gpt-oss`; остальные модели сохраняют переданный режим. Строго локальный режим сохраняет явное `think=false` для любой модели.

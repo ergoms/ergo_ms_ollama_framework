@@ -28,7 +28,7 @@
 - Модели setup-full — `runtime_requirements.yaml` версии 1 и совместимый hook `ollama_models.yaml`; одинаковые объявления объединяются, противоречащие завершаются ошибкой. Общий установщик бинарника — `core/deployment/packages/installers/ollama.py`, прежний `deployment/install_ollama.py` остаётся адаптером. Loader в `deployment/ollama_models_loader.py`, pull — `ergoms ollama_framework:pull-setup-models` (фоновый и foreground serve пишут в `logs/ollama-serve.log` через `log_env` / `ERGO_LOG_FILE_OLLAMA`, не `stderr=PIPE`); в конце `setup-full` ядро останавливает serve через `host_lifecycle.yaml` → `stop_commands`
 - Foreground `start-ollama` на Windows — Job Object `KILL_ON_JOB_CLOSE` + `CREATE_BREAKAWAY_FROM_JOB` (иначе в терминале Cursor serve переживает закрытие вкладки); фоновый `start_ollama_background` по-прежнему переживает выход родителя
 - Embed: сначала `/api/embed`, при 404/501 — fallback на legacy `/api/embeddings` (`prompt`); alias семейства (`embeddinggemma` → `:latest`) логировать один раз на клиент, не на каждый вызов
-- Chat с `format`: обычный клиент ставит `think=low`. В отдельном `chat_local` явное `think=false` сохраняется для короткого структурированного ответа. Если сервер отвечает, что модель не принимает thinking, тот же запрос уходит ещё раз без `think`. У gpt-oss bool `think` игнорируется; длинное рассуждение съедает `num_predict`, и вместо JSON приходит проза
+- Chat с `format`: обычный клиент ставит `think=low` только для семейства `gpt-oss`; другие модели сохраняют переданный режим. В отдельном `chat_local` явное `think=false` сохраняется для короткого структурированного ответа. Если сервер отвечает, что модель не принимает thinking, тот же запрос уходит ещё раз без `think`. У gpt-oss bool `think` игнорируется; длинное рассуждение съедает `num_predict`, и вместо JSON приходит проза
 - `pull-setup-models` качает только библиотеку Ollama. Снимок `org/name` в `OLLAMA_EMBEDDINGS_MODEL` (сейчас `deepvk/USER-bge-m3`) не подменяется на `embeddinggemma` и не идёт в `ollama pull`: `embed` считает его через sentence-transformers. Веса — `huggingface_models.yaml` и `ergoms pull-huggingface-models`. `default: embeddinggemma` в yaml — только если переменная пуста
 - Serve слушает `127.0.0.1` (`OLLAMA_HOST` в `build_ollama_env`); LAN — только явным `OLLAMA_HOST=0.0.0.0:11434`
 - `OLLAMA_NO_CLOUD=1` остаётся. Файл `id_ed25519` в `virtual_env/cache/ollama/home/.ollama/` при старте не удалять: `ollama pull` открывает его, даже когда облако выключено
@@ -47,3 +47,6 @@ ergoms ollama_framework:start-ollama
 ergoms ollama_framework:ollama-status
 ergoms help module ollama_framework
 ```
+
+
+JSON chat: замена bool `think` на `low` нужна только семейству `gpt-oss`; остальные модели сохраняют переданный режим. Строго локальный режим сохраняет явное `think=false` для любой модели.

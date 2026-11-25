@@ -402,12 +402,14 @@ class HttpxOllamaClient(BaseLLMClient):
             payload['options'].update(extra)
         # gpt-oss игнорирует bool think; без уровня low рассуждение съедает num_predict,
         # и в content не остаётся JSON. false + схема даёт прозу вместо объекта.
-        if format is not None and not (self._local_only and payload.get('think') is False):
+        self._ensure_resolved_model()
+        model_family = self.model.rsplit('/', 1)[-1].split(':', 1)[0].lower()
+        if (format is not None and model_family.startswith('gpt-oss')
+                and not (self._local_only and payload.get('think') is False)):
             current = payload.get('think')
             if current in (None, True, False, 'true', 'false'):
                 payload['think'] = 'low'
 
-        self._ensure_resolved_model()
         payload['model'] = self.model
 
         last_error: Optional[Exception] = None
